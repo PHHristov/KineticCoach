@@ -3,14 +3,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Body, Button, Card, H1, H2, Screen, useTheme } from '../../components/ui';
+import { Button, H2, Screen, useTheme } from '../../components/ui';
+import { FinishScreen, type PersonalBest } from '../../components/FinishScreen';
 import { ExercisesLeft, SetProgressBar } from '../../components/WorkoutProgress';
 import { confirm } from '../../lib/confirm';
 import { formatDuration, uid } from '../../lib/id';
 import { buildSteps, type Step } from '../../lib/plan';
 import { useStore } from '../../lib/store';
-import { formatKg, setVolume } from '../../lib/stats';
-import type { LoggedSet, WorkoutItem } from '../../lib/types';
+import { setVolume } from '../../lib/stats';
+import type { CompletedSession, LoggedSet, WorkoutItem } from '../../lib/types';
 import { say, setVoiceEnabled, stopVoice } from '../../lib/voice';
 
 /* ---------- spoken cues ---------- */
@@ -40,7 +41,7 @@ function announce(step: Step): string {
 export default function Player() {
   useScreenAwake();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { workouts, settings, logSession, ready, schedule, plans } = useStore();
+  const { workouts, settings, logSession, ready, schedule, plans, history } = useStore();
   const workout = workouts.find((w) => w.id === id);
   const t = useTheme();
   const insets = useSafeAreaInsets();
@@ -57,6 +58,8 @@ export default function Player() {
   const [voiceOn, setVoiceOn] = useState(settings.voiceEnabled);
 
   const startedAt = useRef(Date.now());
+  const finishedAt = useRef(Date.now());
+  const [personalBests, setPersonalBests] = useState<PersonalBest[]>([]);
   const stats = useRef({ workSec: 0, restSec: 0 });
   const lastSpokenSecond = useRef<number | null>(null);
   /** Sets the user finished, keyed by step index so redoing a set replaces it. */
@@ -150,10 +153,14 @@ export default function Player() {
   }, [workout, logSession, totalSets, schedule, plans]);
 
   const finish = useCallback(() => {
+    finishedAt.current = Date.now();
+    // Personal bests are judged against history from before this session is saved.
+    const pbs = findPersonalBests([...logged.current.values()], history);
+    setPersonalBests(pbs);
     setFinished(true);
-    say('Workout complete. Great job!');
+    say(pbs.length ? `Workout complete. New personal best on ${pbs[0].exerciseName}! Great job!` : 'Workout complete. Great job!');
     saveSession();
-  }, [saveSession]);
+  }, [saveSession, history]);
 
   const goTo = useCallback(
     (next: number, completed: boolean) => {
@@ -229,23 +236,18 @@ export default function Player() {
   }
 
   if (finished) {
-    const total = (Date.now() - startedAt.current) / 1000;
     return (
-      <Screen style={{ padding: 24, paddingTop: insets.top + 32, gap: 16, alignItems: 'center' }}>
-        <View style={{ maxWidth: 520, width: '100%', gap: 16 }}>
-          <Text style={{ fontSize: 56, textAlign: 'center' }}>🏁</Text>
-          <H1>Workout complete</H1>
-          <Body muted>{workout.name}</Body>
-          <Card>
-            <Row label="Total time" value={formatDuration(total)} />
-            <Row label="Active time" value={formatDuration(stats.current.workSec)} />
-            <Row label="Rest time" value={formatDuration(stats.current.restSec)} />
-            <Row label="Sets completed" value={`${logged.current.size} / ${totalSets}`} />
-            <Row label="Weight lifted" value={formatKg([...logged.current.values()].reduce((n, s) => n + setVolume(s), 0))} />
-          </Card>
-          <Button big title="Done" onPress={() => router.dismissTo('/')} />
-        </View>
-      </Screen>
+      <FinishScreen
+        workoutName={workout.name}
+        totalSec={(finishedAt.current - startedAt.current) / 1000}
+        workSec={stats.current.workSec}
+        restSec={stats.current.restSec}
+        setsDone={logged.current.size}
+        totalSets={totalSets}
+        volumeKg={[...logged.current.values()].reduce((n, s) => n + setVolume(s), 0)}
+        personalBests={personalBests}
+        onDone={() => router.dismissTo('/')}
+      />
     );
   }
 
@@ -335,13 +337,22 @@ export default function Player() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-      <Body muted>{label}</Body>
-      <Body style={{ fontWeight: '700' }}>{value}</Body>
-    </View>
-  );
+/** Exercises where this session's heaviest set beats every earlier logged set. */
+function findPersonalBests(sets: LoggedSet[], history: CompletedSession[]): PersonalBest[] {
+  const top = new Map<string, LoggedSet>();
+  for (const s of sets) {
+    if (s.weightKg > 0 && s.weightKg > (top.get(s.exerciseId)?.weightKg ?? 0)) top.set(s.exerciseId, s);
+  }
+  const result: PersonalBest[] = [];
+  for (const [exerciseId, s] of top) {
+    let previous = 0;
+    for (const session of history) {
+      for (const p of session.sets ?? []) if (p.exerciseId === exerciseId) previous = Math.max(previous, p.weightKg);
+    }
+    // Only a real improvement counts; a first-ever session has nothing to beat.
+    if (previous > 0 && s.weightKg > previous) result.push({ exerciseName: s.exerciseName, weightKg: s.weightKg, previousKg: previous });
+  }
+  return result;
 }
 
 /** Big − value + control for logging a set, styled for the coloured player background. */

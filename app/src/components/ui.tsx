@@ -23,6 +23,8 @@ const light = {
   work: '#FF5A1F',
   prep: '#8A5CF6',
   danger: '#D92D20',
+  // Celebration green; dark enough for white text (about 4.7:1).
+  success: '#05854A',
   chip: '#EEF1F4',
 };
 const dark: typeof light = {
@@ -37,6 +39,7 @@ const dark: typeof light = {
   work: '#FF6B35',
   prep: '#9B74F7',
   danger: '#F04438',
+  success: '#05854A',
   chip: '#232931',
 };
 export type Theme = typeof light;
