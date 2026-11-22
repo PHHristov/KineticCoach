@@ -167,10 +167,8 @@ const FORE = 0.14;
 const TRUNK = 0.3;
 
 /** Elbow angle for one arm at time t; `slot` picks which rep slots this arm curls in. */
-export function curlAt(t: number, o: CurlSimOptions, slot: 'all' | 'even' | 'odd' = 'all', leadIn = 1.5) {
+export function curlAt(t: number, o: CurlSimOptions, slot: 'all' | 'even' | 'odd' = 'all', leadIn = 1.5, rest = 1.0, pause = 0.3) {
   const start = o.startAngle ?? 170;
-  const rest = 1.0;
-  const pause = 0.3;
   const len = rest + o.conSec + pause + o.eccSec;
   const r = t - leadIn;
   const total = (slot === 'all' ? o.reps : o.reps * 2) * len;

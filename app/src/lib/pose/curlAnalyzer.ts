@@ -105,8 +105,12 @@ export const CURL_CONFIG = {
   partialTopAngle: 75,
   /** The arm should straighten to at least this angle between reps. */
   fullExtension: 150,
-  eccentricControlled: 2.0,
-  eccentricTooFast: 1.2,
+  /**
+   * Measured lowering time stops just before full extension, so it reads about 10–15% short.
+   * 1.7 s measured ≈ 2 s real lowering; 1.05 s measured ≈ 1.2 s real ("dropping").
+   */
+  eccentricControlled: 1.7,
+  eccentricTooFast: 1.05,
   /** Curls are lifted under control too: up in about 1–1.5 s is ideal. */
   concentricExplosive: 1.5,
   concentricTooSlow: 3.0,

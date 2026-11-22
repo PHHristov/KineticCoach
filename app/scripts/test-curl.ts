@@ -61,6 +61,14 @@ console.log('Dropping the weight (0.5 s down)');
   check('live "lower slowly" before the rep ends', cueBeforeRep(events, 'fast-lower'), events.slice(0, 4));
 }
 
+console.log('Lowering timer matches real time');
+{
+  const two = run({ view: 'side', reps: 2, conSec: 1, eccSec: 2.0, topAngle: 40 });
+  check('a real 2.0 s lowering counts as controlled', two.reps.length === 2 && two.reps.every((r) => r.eccentric === 'controlled'), show(two.reps));
+  const quick = run({ view: 'side', reps: 2, conSec: 1, eccSec: 1.1, topAngle: 40 });
+  check('a real 1.1 s lowering counts as dropping', quick.reps.length === 2 && quick.reps.every((r) => r.eccentric === 'fast'), show(quick.reps));
+}
+
 console.log('Not curling high enough (top at 88°)');
 {
   const { reps } = run({ view: 'side', reps: 2, conSec: 1, eccSec: 2, topAngle: 88 });

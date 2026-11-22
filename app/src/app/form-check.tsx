@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ExerciseGuide } from '../components/pose/ExerciseGuide';
 import PoseCamera from '../components/pose/PoseCamera';
 import type { CameraStatus } from '../components/pose/types';
 import type { LiveState, RepBase, Tempo, View as CamView } from '../lib/pose/analyzer';
@@ -22,7 +23,7 @@ export default function FormCheckScreen() {
   useScreenAwake();
   const insets = useSafeAreaInsets();
   const { settings } = useStore();
-  const params = useLocalSearchParams<{ demo?: string; exercise?: string }>();
+  const params = useLocalSearchParams<{ demo?: string; exercise?: string; guide?: string }>();
   const demoMode = params.demo === '1';
   const [exerciseId, setExerciseId] = useState(formExercise(params.exercise).id);
   const ex = formExercise(exerciseId);
@@ -36,6 +37,7 @@ export default function FormCheckScreen() {
   const [facing, setFacing] = useState<'user' | 'environment'>('user');
   const [stats, setStats] = useState<{ fps: number; inferenceMs: number } | null>(null);
   const [showSummary, setShowSummary] = useState(false);
+  const [showGuide, setShowGuide] = useState(params.guide === '1');
   const lastUi = useRef(0);
 
   useEffect(() => setVoiceEnabled(voiceOn), [voiceOn]);
@@ -105,8 +107,11 @@ export default function FormCheckScreen() {
   const bodyInView = phase !== 'not-visible' && live?.metric !== undefined;
   const lastRep = reps[reps.length - 1];
 
+  if (showGuide)
+    return <ExerciseGuide name={ex.name} guide={ex.guide} joint={ex.guideJoint} voice={voiceOn} onClose={() => setShowGuide(false)} />;
+
   if (showSummary)
-    return <Summary ex={ex} reps={reps} count={live?.reps ?? reps.length} perSide={live?.perSide} onAgain={reset} onClose={() => router.back()} insets={insets} />;
+    return <Summary ex={ex} reps={reps} count={live?.reps ?? reps.length} perSide={live?.perSide} onGuide={() => setShowGuide(true)} onAgain={reset} onClose={() => router.back()} insets={insets} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -124,6 +129,7 @@ export default function FormCheckScreen() {
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Pill label="✕ Close" onPress={() => router.back()} />
           <View style={{ flex: 1 }} />
+          <Pill label="How?" onPress={() => setShowGuide(true)} a11y={`How to do a ${ex.name.toLowerCase()}`} />
           <Pill label={voiceOn ? '🔊' : '🔇'} onPress={() => setVoiceOn((v) => !v)} a11y={voiceOn ? 'Mute voice' : 'Unmute voice'} />
           {Platform.OS === 'web' && !demoMode ? (
             <Pill label="⟲" onPress={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} a11y="Switch camera" />
@@ -180,7 +186,7 @@ export default function FormCheckScreen() {
 
       {/* status / setup */}
       {status.kind !== 'running' || phase === 'get-ready' || phase === 'not-visible' ? (
-        <SetupCard ex={ex} status={status} phase={phase} view={bodyInView ? view : null} />
+        <SetupCard ex={ex} status={status} phase={phase} view={bodyInView ? view : null} onGuide={() => setShowGuide(true)} />
       ) : null}
 
       {/* last rep + live issues */}
@@ -235,7 +241,19 @@ function Gauge({ ex, progress, top }: { ex: FormExercise; progress: number; top:
   );
 }
 
-function SetupCard({ ex, status, phase, view }: { ex: FormExercise; status: CameraStatus; phase: string; view: CamView | null }) {
+function SetupCard({
+  ex,
+  status,
+  phase,
+  view,
+  onGuide,
+}: {
+  ex: FormExercise;
+  status: CameraStatus;
+  phase: string;
+  view: CamView | null;
+  onGuide: () => void;
+}) {
   const title =
     status.kind === 'error'
       ? 'Camera unavailable'
@@ -250,6 +268,9 @@ function SetupCard({ ex, status, phase, view }: { ex: FormExercise; status: Came
     <View style={{ position: 'absolute', left: 12, right: 12, bottom: 24, alignItems: 'center' }}>
       <View style={{ backgroundColor: 'rgba(0,0,0,0.78)', borderRadius: 18, padding: 18, gap: 8, maxWidth: 560, width: '100%' }}>
         <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>{title}</Text>
+        <Pressable onPress={onGuide} accessibilityRole="button" style={{ alignSelf: 'flex-start', backgroundColor: GREEN, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 }}>
+          <Text style={{ color: '#fff', fontWeight: '900' }}>▶ See how a perfect {ex.name.toLowerCase()} looks</Text>
+        </Pressable>
         {status.kind === 'error' ? (
           <Text style={{ color: '#fff', opacity: 0.9, fontSize: 15, lineHeight: 21 }}>{status.message}</Text>
         ) : (
@@ -350,6 +371,7 @@ function Summary({
   reps,
   count,
   perSide,
+  onGuide,
   onAgain,
   onClose,
   insets,
@@ -359,6 +381,7 @@ function Summary({
   /** The rep counter (left + right counts as one for curls). */
   count: number;
   perSide?: { left: number; right: number };
+  onGuide: () => void;
   onAgain: () => void;
   onClose: () => void;
   insets: { top: number; bottom: number };
@@ -401,6 +424,9 @@ function Summary({
               <View style={{ backgroundColor: '#1F2937', borderRadius: 14, padding: 14, gap: 4 }}>
                 <Text style={{ color: AMBER, fontWeight: '900' }}>Focus next time: {ex.issues[stats.top[0]].title}</Text>
                 <Text style={{ color: '#fff', opacity: 0.9, lineHeight: 20 }}>{ex.issues[stats.top[0]].detail}</Text>
+                <Pressable onPress={onGuide} accessibilityRole="button" style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+                  <Text style={{ color: GREEN, fontWeight: '900' }}>▶ See correct form</Text>
+                </Pressable>
               </View>
             ) : (
               <Text style={{ color: GREEN, fontWeight: '900', fontSize: 16 }}>Every rep was clean. Great form!</Text>

@@ -1,6 +1,7 @@
 import type { IssueInfo, PoseAnalyzer, RepBase, View } from './analyzer';
 import { CURL_CHECKS_BY_VIEW, CURL_ISSUES, CurlAnalyzer, curlRepSpeech, type CurlRep } from './curlAnalyzer';
-import type { Point, Point3 } from './landmarks';
+import { CURL_GUIDE, SQUAT_GUIDE, type Guide } from './guide';
+import { L, type Point, type Point3 } from './landmarks';
 import { curlDemoFrame, demoFrame } from './simulate';
 import { CHECKS_BY_VIEW, ISSUES, repSpeech, SquatAnalyzer, type RepResult } from './squatAnalyzer';
 
@@ -25,6 +26,10 @@ export type FormExercise = {
   /** Word for a good (quick) lift: squats should be explosive, curls a steady strong pace. */
   goodLiftLabel: string;
   demoFrame: (t: number) => { image: Point[]; world: Point3[] };
+  /** Technique demo and targets. */
+  guide: Guide;
+  /** Landmark whose angle the guide highlights. */
+  guideJoint: number;
 };
 
 export const FORM_EXERCISES: FormExercise[] = [
@@ -48,6 +53,8 @@ export const FORM_EXERCISES: FormExercise[] = [
     tempoTarget: '2+ s down, about 1 s up',
     goodLiftLabel: 'explosive',
     demoFrame,
+    guide: SQUAT_GUIDE,
+    guideJoint: L.leftKnee,
   },
   {
     id: 'bicep-curl',
@@ -70,6 +77,8 @@ export const FORM_EXERCISES: FormExercise[] = [
     tempoTarget: 'about 1 s up, 2+ s down',
     goodLiftLabel: 'good pace',
     demoFrame: curlDemoFrame,
+    guide: CURL_GUIDE,
+    guideJoint: L.leftElbow,
   },
 ];
 
