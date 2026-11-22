@@ -6,6 +6,7 @@ import { Body, Button, Card, Chip, H1, H2, Screen, useTheme } from '../../compon
 import { confirm } from '../../lib/confirm';
 import { clone, formatDuration, uid } from '../../lib/id';
 import { describeSet, estimateWorkout } from '../../lib/plan';
+import { formExerciseFor } from '../../lib/pose/exercises';
 import { shareLink } from '../../lib/share';
 import { useStore } from '../../lib/store';
 
@@ -89,6 +90,15 @@ export default function WorkoutDetail() {
                   {describeSet(item)}
                   {item.sets > 1 ? ` · ${item.restBetweenSetsSec}s rest between sets` : ''}
                 </Body>
+                {formExerciseFor(item.exerciseId) ? (
+                  <Text
+                    accessibilityRole="link"
+                    onPress={() => router.push({ pathname: '/form-check', params: { exercise: formExerciseFor(item.exerciseId)!.id } })}
+                    style={{ color: t.primary, fontWeight: '700', marginTop: 2 }}
+                  >
+                    📷 Check form
+                  </Text>
+                ) : null}
               </Card>
               {!last && item.restAfterSec > 0 ? (
                 <Text style={{ color: t.rest, fontWeight: '700', textAlign: 'center', fontSize: 13 }}>

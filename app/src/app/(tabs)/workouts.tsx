@@ -24,7 +24,7 @@ export default function WorkoutsScreen() {
               <Button title="+ New workout" onPress={() => router.push('/edit/new')} />
               <Button title="Import" variant="secondary" onPress={() => router.push('/import')} />
               <Button title="Exercise library" variant="secondary" onPress={() => router.push('/exercises')} />
-              <Button title="📷 Squat form check" variant="secondary" onPress={() => router.push('/form-check')} />
+              <Button title="📷 Form check" variant="secondary" onPress={() => router.push('/form-check')} />
             </View>
           </View>
         }

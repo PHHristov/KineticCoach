@@ -41,7 +41,7 @@ console.log('Side view, good squats (2.4 s down, 0.8 s up, deep)');
   const { last, events } = run({ view: 'side', reps: 3, eccSec: 2.4, conSec: 0.8, minAngle: 75, noise: 0.002 });
   check('counts 3 reps', last.length === 3, reps(last));
   check('all deep', last.every((r) => r.depth === 'deep'), reps(last));
-  check('descent controlled, ascent explosive', last.every((r) => r.descent === 'controlled' && r.ascent === 'explosive'), reps(last));
+  check('descent controlled, ascent explosive', last.every((r) => r.eccentric === 'controlled' && r.concentric === 'explosive'), reps(last));
   check('tempo measured within 0.4 s', last.every((r) => Math.abs(r.eccentricSec - 2.4) < 0.4 && Math.abs(r.concentricSec - 0.8) < 0.4), reps(last));
   check('no issues, score 100', last.every((r) => r.issues.length === 0 && r.score === 100), reps(last));
   check('detected side view', last.every((r) => r.view === 'side'), reps(last));
@@ -51,7 +51,7 @@ console.log('Side view, good squats (2.4 s down, 0.8 s up, deep)');
 console.log('Dropping fast (0.6 s down)');
 {
   const { last, events } = run({ view: 'side', reps: 2, eccSec: 0.6, conSec: 0.8, minAngle: 80 });
-  check('flags fast descent', last.every((r) => r.issues.includes('fast-descent') && r.descent === 'fast'), reps(last));
+  check('flags fast descent', last.every((r) => r.issues.includes('fast-descent') && r.eccentric === 'fast'), reps(last));
   const cue = events.find((e) => e.e.type === 'cue' && e.e.issue === 'fast-descent');
   const firstRep = events.find((e) => e.e.type === 'rep');
   check('live "slow down" before the rep ends', !!cue && !!firstRep && cue.t < firstRep.t, events.slice(0, 4));
@@ -60,7 +60,7 @@ console.log('Dropping fast (0.6 s down)');
 console.log('Slow on the way up (2.2 s up)');
 {
   const { last } = run({ view: 'side', reps: 2, eccSec: 2.2, conSec: 2.2, minAngle: 80 });
-  check('flags slow ascent', last.every((r) => r.issues.includes('slow-ascent') && r.ascent === 'slow'), reps(last));
+  check('flags slow ascent', last.every((r) => r.issues.includes('slow-ascent') && r.concentric === 'slow'), reps(last));
 }
 
 console.log('Half squats (knee angle 118°)');

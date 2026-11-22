@@ -1,4 +1,18 @@
+import {
+  clamp,
+  concentricTempo,
+  eccentricTempo,
+  type AnalyzerEvent as Event,
+  type IssueInfo,
+  type LiveState as Live,
+  type Phase,
+  type PoseAnalyzer,
+  type RepBase,
+  type View,
+} from './analyzer';
 import { angle3, dist2, L, leanFromVertical, mid, vis, type Point, type PoseFrame } from './landmarks';
+
+export type { Phase, View };
 
 /**
  * Real-time squat analysis from pose landmarks. Platform-independent: feed it one
@@ -6,12 +20,10 @@ import { angle3, dist2, L, leanFromVertical, mid, vis, type Point, type PoseFram
  * state plus events (instant form cues and finished reps).
  */
 
-export type View = 'side' | 'front' | 'angled';
-export type Phase = 'not-visible' | 'get-ready' | 'top' | 'down' | 'up';
 export type Depth = 'deep' | 'parallel' | 'half' | 'shallow';
 export type IssueId = 'knees-in' | 'chest-forward' | 'heels-up' | 'shift' | 'fast-descent' | 'slow-ascent' | 'shallow';
 
-export const ISSUES: Record<IssueId, { cue: string; title: string; detail: string }> = {
+export const ISSUES: Record<IssueId, IssueInfo> = {
   'knees-in': {
     cue: 'Knees out',
     title: 'Knees caving in',
@@ -56,44 +68,15 @@ export const CHECKS_BY_VIEW: Record<View, IssueId[]> = {
   angled: ['chest-forward', 'shallow', 'fast-descent', 'slow-ascent'],
 };
 
-export type Tempo = 'controlled' | 'ok' | 'fast' | 'explosive' | 'slow';
-
-export type RepResult = {
-  n: number;
+export type RepResult = RepBase & {
   depth: Depth;
   /** Smallest hip–knee–ankle angle reached, degrees (lower = deeper). */
   minKneeAngle: number;
-  /** Degrees travelled from standing to the bottom. */
-  romDeg: number;
-  eccentricSec: number;
-  concentricSec: number;
-  descent: Tempo;
-  ascent: Tempo;
   issues: IssueId[];
-  score: number;
-  view: View;
 };
 
-export type LiveState = {
-  phase: Phase;
-  view: View;
-  /** Smoothed knee angle in degrees, if the legs are visible. */
-  kneeAngle?: number;
-  /** 0 at standing, 1 at parallel depth. */
-  depthProgress: number;
-  reps: number;
-  lastRep?: RepResult;
-  /** Problems seen in the rep in progress (or the last rep while standing). */
-  activeIssues: IssueId[];
-  /** Per-joint flags for colouring the skeleton. */
-  badJoints: number[];
-};
-
-export type AnalyzerEvent =
-  | { type: 'ready' }
-  | { type: 'cue'; issue: IssueId }
-  | { type: 'rep'; rep: RepResult }
-  | { type: 'partial' };
+export type LiveState = Live<RepResult>;
+export type AnalyzerEvent = Event<RepResult>;
 
 export const CONFIG = {
   /** Knee angle above which you count as standing. */
@@ -138,9 +121,8 @@ type RepAcc = {
   view: View;
 };
 
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-export class SquatAnalyzer {
+export class SquatAnalyzer implements PoseAnalyzer<RepResult> {
   private angleS?: number;
   private vel = 0;
   private lastT?: number;
@@ -232,7 +214,7 @@ export class SquatAnalyzer {
         if (angle > CONFIG.standingAngle) {
           this.topSince ??= f.t;
           if (f.t - this.topSince > 400) {
-            this.phase = 'top';
+            this.phase = 'start';
             this.topRef = clamp(angle, CONFIG.standingAngle, 180);
             this.lastTopT = f.t;
             events.push({ type: 'ready' });
@@ -242,7 +224,7 @@ export class SquatAnalyzer {
         }
         break;
       }
-      case 'top': {
+      case 'start': {
         // Track how straight "standing" is for this person, and baselines for comparisons.
         if (angle > this.topRef) this.topRef = Math.min(180, angle);
         else if (angle > this.topRef - 5) this.topRef += (angle - this.topRef) * 0.02;
@@ -264,11 +246,11 @@ export class SquatAnalyzer {
             hipBelowKnee: false,
             view: this.view,
           };
-          this.phase = 'down';
+          this.phase = 'eccentric';
         }
         break;
       }
-      case 'down': {
+      case 'eccentric': {
         const r = this.rep!;
         if (angle < r.minAngle) {
           r.minAngle = angle;
@@ -279,16 +261,16 @@ export class SquatAnalyzer {
         if (angle > r.minAngle + 8 && this.vel > 15) {
           r.bottomT = r.minT;
           r.maxSinceBottom = angle;
-          this.phase = 'up';
+          this.phase = 'concentric';
         }
         break;
       }
-      case 'up': {
+      case 'concentric': {
         const r = this.rep!;
         r.maxSinceBottom = Math.max(r.maxSinceBottom, angle);
         if (angle < r.maxSinceBottom - 12) {
           // Went back down before standing up: carry on with the same rep.
-          this.phase = 'down';
+          this.phase = 'eccentric';
           break;
         }
         if (angle > this.topRef - CONFIG.finishRepMargin) {
@@ -300,7 +282,7 @@ export class SquatAnalyzer {
 
     // 6. Form checks while in the working part of a rep.
     const r = this.rep;
-    if (r && (this.phase === 'down' || this.phase === 'up') && angle < this.topRef - 25) {
+    if (r && (this.phase === 'eccentric' || this.phase === 'concentric') && angle < this.topRef - 25) {
       if (this.view === 'front') {
         const kw = kneeWidth / ankleWidth;
         const base = this.kneeWidthBase ?? 1;
@@ -346,7 +328,7 @@ export class SquatAnalyzer {
   private finishRep(t: number, events: AnalyzerEvent[]) {
     const r = this.rep!;
     this.rep = null;
-    this.phase = 'top';
+    this.phase = 'start';
     this.lastTopT = t;
     if (r.minAngle > CONFIG.minRepAngle) {
       events.push({ type: 'partial' });
@@ -360,10 +342,8 @@ export class SquatAnalyzer {
       r.minAngle <= CONFIG.depth.deep ? 'deep' : r.minAngle <= CONFIG.depth.parallel ? 'parallel' : r.minAngle <= CONFIG.depth.half ? 'half' : 'shallow';
     if (r.hipBelowKnee && (depth === 'half' || depth === 'shallow')) depth = 'parallel';
 
-    const descent: Tempo =
-      eccentricSec >= CONFIG.eccentricControlled ? 'controlled' : eccentricSec >= CONFIG.eccentricTooFast ? 'ok' : 'fast';
-    const ascent: Tempo =
-      concentricSec <= CONFIG.concentricExplosive ? 'explosive' : concentricSec <= CONFIG.concentricTooSlow ? 'ok' : 'slow';
+    const descent = eccentricTempo(eccentricSec, CONFIG.eccentricControlled, CONFIG.eccentricTooFast);
+    const ascent = concentricTempo(concentricSec, CONFIG.concentricExplosive, CONFIG.concentricTooSlow);
 
     const issues = new Set(r.issues);
     if (descent === 'fast') issues.add('fast-descent');
@@ -392,14 +372,16 @@ export class SquatAnalyzer {
       romDeg: Math.round(this.topRef - r.minAngle),
       eccentricSec: Math.round(eccentricSec * 10) / 10,
       concentricSec: Math.round(concentricSec * 10) / 10,
-      descent,
-      ascent,
+      eccentric: descent,
+      concentric: ascent,
       issues: [...issues],
       score: clamp(score, 0, 100),
       view: r.view,
+      range: { label: depthLabel(depth), good: depth === 'deep' || depth === 'parallel' },
+      detail: `knee ${Math.round(r.minAngle)}° at the bottom`,
     };
     this.results.push(rep);
-    events.push({ type: 'rep', rep });
+    events.push({ type: 'rep', rep, newCount: true });
   }
 
   private state(): LiveState {
@@ -409,8 +391,9 @@ export class SquatAnalyzer {
     return {
       phase: this.phase,
       view: this.view,
-      kneeAngle: angle === undefined ? undefined : Math.round(angle),
-      depthProgress: angle === undefined ? 0 : clamp((this.topRef - angle) / Math.max(1, this.topRef - target), 0, 1.2),
+      metric: angle === undefined ? undefined : `Knee ${Math.round(angle)}°`,
+      progress: angle === undefined ? 0 : clamp((this.topRef - angle) / Math.max(1, this.topRef - target), 0, 1.2),
+      inRep: this.phase === 'eccentric' || this.phase === 'concentric',
       reps: this.results.length,
       lastRep,
       activeIssues: this.rep ? [...this.rep.issues] : lastRep?.issues ?? [],
@@ -424,7 +407,7 @@ export function repSpeech(rep: RepResult): string {
   const main = rep.issues[0];
   if (!main) {
     const depth = rep.depth === 'deep' ? 'Deep' : 'Good depth';
-    return `${rep.n}. ${depth}${rep.ascent === 'explosive' ? ', explosive' : ''}. Great rep!`;
+    return `${rep.n}. ${depth}${rep.concentric === 'explosive' ? ', explosive' : ''}. Great rep!`;
   }
   return `${rep.n}. ${ISSUES[main].cue}.`;
 }

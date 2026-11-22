@@ -131,3 +131,151 @@ export function demoFrame(t: number): { image: Point[]; world: Point3[] } {
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   return simulatePose(k, rep, depth, rand);
 }
+
+/* ---------------- bicep curl ---------------- */
+
+export type CurlFault = {
+  /** Upper arm swings forward by this many degrees at the top. */
+  elbowDrift?: number;
+  /** Torso rocks back by this many degrees at the top. */
+  swing?: number;
+  /** Elbows move out sideways at the top (image units). */
+  flare?: number;
+  /** Shoulders rise at the top (image units). */
+  shrug?: number;
+};
+
+export type CurlSimOptions = {
+  view: 'side' | 'front';
+  reps: number;
+  conSec: number;
+  eccSec: number;
+  /** Smallest elbow angle at the top. */
+  topAngle: number;
+  /** Elbow angle when the arm is down. */
+  startAngle?: number;
+  /** both = together, alternate = left then right, left = only the left arm moves. */
+  arms?: 'both' | 'alternate' | 'left';
+  fault?: CurlFault;
+  /** Random jitter on every landmark, image and 3D (like real tracking noise). */
+  noise?: number;
+  fps?: number;
+};
+
+const UPPER = 0.15;
+const FORE = 0.14;
+const TRUNK = 0.3;
+
+/** Elbow angle for one arm at time t; `slot` picks which rep slots this arm curls in. */
+export function curlAt(t: number, o: CurlSimOptions, slot: 'all' | 'even' | 'odd' = 'all', leadIn = 1.5) {
+  const start = o.startAngle ?? 170;
+  const rest = 1.0;
+  const pause = 0.3;
+  const len = rest + o.conSec + pause + o.eccSec;
+  const r = t - leadIn;
+  const total = (slot === 'all' ? o.reps : o.reps * 2) * len;
+  if (r <= 0 || r >= total) return { e: start, prog: 0 };
+  const i = Math.floor(r / len);
+  if ((slot === 'even' && i % 2) || (slot === 'odd' && i % 2 === 0)) return { e: start, prog: 0 };
+  const p = r % len;
+  let prog = 0;
+  if (p < rest) prog = 0;
+  else if (p < rest + o.conSec) prog = ease((p - rest) / o.conSec);
+  else if (p < rest + o.conSec + pause) prog = 1;
+  else prog = 1 - ease((p - rest - o.conSec - pause) / o.eccSec);
+  return { e: start - (start - o.topAngle) * prog, prog };
+}
+
+/** Landmarks of a person standing and curling, with the given elbow angles per arm. */
+export function simulateCurlPose(
+  arms: { left: { e: number; prog: number }; right: { e: number; prog: number } },
+  o: CurlSimOptions,
+  rand: () => number,
+): { image: Point[]; world: Point3[] } {
+  const f = o.fault ?? {};
+  const n = () => (rand() - 0.5) * 2 * (o.noise ?? 0);
+  const image: Point[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 }));
+  const world: Point3[] = Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0, visibility: 0.9 }));
+  const progMax = Math.max(arms.left.prog, arms.right.prog);
+  const lean = ((f.swing ?? 0) * progMax * Math.PI) / 180; // leaning back
+  const shrug = (f.shrug ?? 0) * progMax;
+
+  // Legs and hips: standing straight.
+  const hipY = 0.62;
+  const set = (i: number, x: number, y: number, wx: number, wy: number, wz: number, v = 0.95) => {
+    image[i] = { x: x + n(), y: y + n(), visibility: v };
+    world[i] = { x: wx + n(), y: wy + n(), z: wz + n(), visibility: v };
+  };
+  const sides = [
+    { s: 'left' as const, sign: -1, sh: L.leftShoulder, el: L.leftElbow, wr: L.leftWrist, hip: L.leftHip, knee: L.leftKnee, ankle: L.leftAnkle, heel: L.leftHeel, foot: L.leftFoot },
+    { s: 'right' as const, sign: 1, sh: L.rightShoulder, el: L.rightElbow, wr: L.rightWrist, hip: L.rightHip, knee: L.rightKnee, ankle: L.rightAnkle, heel: L.rightHeel, foot: L.rightFoot },
+  ];
+  for (const d of sides) {
+    const arm = arms[d.s];
+    const drift = (((f.elbowDrift ?? 0) * arm.prog + 5) * Math.PI) / 180; // upper arm angle from vertical
+    const theta = drift + ((180 - arm.e) * Math.PI) / 180; // forearm angle from straight down
+    // Sagittal-plane positions (u = forward, v = down) for shoulder/elbow/wrist.
+    const sh = { u: TRUNK * Math.sin(-lean), v: hipY - TRUNK * Math.cos(lean) - shrug };
+    const el = { u: sh.u + UPPER * Math.sin(drift), v: sh.v + UPPER * Math.cos(drift) };
+    const wr = { u: el.u + FORE * Math.sin(theta), v: el.v + FORE * Math.cos(theta) };
+    const flare = (f.flare ?? 0) * arm.prog;
+    if (o.view === 'side') {
+      const vis = d.s === 'left' ? 0.95 : 0.6;
+      const off = d.sign * 0.01;
+      set(d.sh, 0.5 + sh.u + off, sh.v, sh.u, sh.v, d.sign * 0.18, vis);
+      set(d.el, 0.5 + el.u + off, el.v, el.u, el.v, d.sign * 0.2, vis);
+      set(d.wr, 0.5 + wr.u + off, wr.v, wr.u, wr.v, d.sign * 0.2, vis);
+      set(d.hip, 0.5 + off, hipY, 0, hipY, d.sign * 0.1, vis);
+      set(d.knee, 0.5 + off, hipY + 0.2, 0, hipY + 0.2, d.sign * 0.1, vis);
+      set(d.ankle, 0.5 + off, hipY + 0.4, 0, hipY + 0.4, d.sign * 0.1, vis);
+      set(d.heel, 0.47 + off, hipY + 0.42, -0.03, hipY + 0.42, d.sign * 0.1, vis);
+      set(d.foot, 0.56 + off, hipY + 0.42, 0.06, hipY + 0.42, d.sign * 0.1, vis);
+    } else {
+      const shX = 0.5 + d.sign * 0.09;
+      const elX = shX + d.sign * flare;
+      // Facing the camera: forward motion becomes depth (z), so only y changes on screen.
+      set(d.sh, shX, sh.v, d.sign * 0.09, sh.v, -sh.u);
+      set(d.el, elX, el.v, d.sign * 0.09 + d.sign * flare, el.v, -el.u);
+      set(d.wr, elX, wr.v, d.sign * 0.09 + d.sign * flare, wr.v, -wr.u);
+      set(d.hip, 0.5 + d.sign * 0.06, hipY, d.sign * 0.06, hipY, 0);
+      set(d.knee, 0.5 + d.sign * 0.06, hipY + 0.2, d.sign * 0.06, hipY + 0.2, 0);
+      set(d.ankle, 0.5 + d.sign * 0.06, hipY + 0.4, d.sign * 0.06, hipY + 0.4, 0);
+      set(d.heel, 0.5 + d.sign * 0.06, hipY + 0.42, d.sign * 0.06, hipY + 0.42, 0.03);
+      set(d.foot, 0.5 + d.sign * 0.07, hipY + 0.43, d.sign * 0.07, hipY + 0.43, -0.06);
+    }
+  }
+  return { image, world };
+}
+
+/** Curl demo: side-on, one clean rep then common mistakes, looping. */
+const CURL_DEMO: Pick<CurlSimOptions, 'conSec' | 'eccSec' | 'topAngle' | 'fault'>[] = [
+  { conSec: 1.0, eccSec: 2.5, topAngle: 40 },
+  { conSec: 1.0, eccSec: 0.6, topAngle: 42 },
+  { conSec: 1.1, eccSec: 2.2, topAngle: 45, fault: { elbowDrift: 40 } },
+  { conSec: 0.9, eccSec: 2.2, topAngle: 45, fault: { swing: 20 } },
+  { conSec: 1.0, eccSec: 2.2, topAngle: 88 },
+];
+
+export function curlDemoFrame(t: number): { image: Point[]; world: Point3[] } {
+  const slot = (r: { conSec: number; eccSec: number }) => 1.0 + r.conSec + 0.3 + r.eccSec;
+  // Side-on mistakes first, then a short front-on section alternating arms (left + right = one rep).
+  const alternate = { conSec: 1.0, eccSec: 2.2, topAngle: 42 };
+  const sideLen = CURL_DEMO.map(slot).reduce((a, b) => a + b, 0);
+  const frontLen = 4 * slot(alternate) + 1.5; // 1.5 s to turn and settle
+  const cycle = sideLen + frontLen;
+  let seed = Math.floor(t * 1000) + 1;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  if (t < 1.5) return simulateCurlPose({ left: { e: 170, prog: 0 }, right: { e: 170, prog: 0 } }, { ...CURL_DEMO[0], view: 'side', reps: 1, noise: 0.0015 }, rand);
+
+  let local = (t - 1.5) % cycle;
+  if (local < sideLen) {
+    let i = 0;
+    while (local >= slot(CURL_DEMO[i])) local -= slot(CURL_DEMO[i++]);
+    const rep: CurlSimOptions = { ...CURL_DEMO[i], view: 'side', reps: 1, noise: 0.0015 };
+    const arm = curlAt(local, rep, 'all', 0);
+    return simulateCurlPose({ left: arm, right: arm }, rep, rand);
+  }
+  const opts: CurlSimOptions = { ...alternate, view: 'front', reps: 2, noise: 0.0015, arms: 'alternate' };
+  const ft = local - sideLen;
+  return simulateCurlPose({ left: curlAt(ft, opts, 'even'), right: curlAt(ft, opts, 'odd') }, opts, rand);
+}

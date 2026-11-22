@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { BODY_CONNECTIONS, type PoseFrame } from '../../lib/pose/landmarks';
-import { demoFrame } from '../../lib/pose/simulate';
 import type { PoseCameraProps } from './types';
 
 type Vision = typeof import('@mediapipe/tasks-vision');
@@ -154,7 +153,7 @@ export default function PoseCamera({ onFrame, onStatus, onStats, facing, demo }:
       const canvas = canvasRef.current;
       if (canvas) {
         const now = performance.now();
-        const { image, world } = demoFrame((now - demoStart) / 1000);
+        const { image, world } = demo!((now - demoStart) / 1000);
         const bad = cb.current.onFrame({ t: now, image, world, aspect: 1 });
         draw(canvas, 1, image, bad);
       }
