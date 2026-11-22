@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kineticcoach.app"
+      "bundleIdentifier": "com.kineticcoach.app",
+      "appleTeamId": "483V5ZV6G5"
     },
     "android": {
       "adaptiveIcon": {
