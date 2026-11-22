@@ -87,6 +87,17 @@ export default function HomeScreen() {
 
         {/* selected day */}
         <DayDetail day={selectedDay} hasPlan={!!plan} />
+
+        <Pressable onPress={() => router.push('/form-check')} accessibilityRole="button">
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Text style={{ fontSize: 28 }}>📷</Text>
+            <View style={{ flex: 1 }}>
+              <H2>Squat form check</H2>
+              <Body muted style={{ fontSize: 13 }}>Live camera feedback on depth, form and tempo.</Body>
+            </View>
+            <Text style={{ color: t.primary, fontWeight: '800' }}>Start ›</Text>
+          </Card>
+        </Pressable>
       </ScrollView>
     </Screen>
   );

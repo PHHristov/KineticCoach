@@ -46,6 +46,7 @@ export default function RootLayout() {
           <Stack.Screen name="plan-edit/[id]" options={{ title: 'Edit plan' }} />
           <Stack.Screen name="exercise/[id]" options={{ title: 'Exercise progress' }} />
           <Stack.Screen name="play/[id]" options={{ headerShown: false, gestureEnabled: false }} />
+          <Stack.Screen name="form-check" options={{ headerShown: false, gestureEnabled: false }} />
         </Stack>
       </StoreProvider>
     </SafeAreaProvider>
