@@ -3,9 +3,18 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { Body, Button, Card, H1, H2, Screen, useTheme } from '../../components/ui';
 import { WEEKDAYS_SHORT } from '../../lib/calendar';
 import { useStore } from '../../lib/store';
+import { PLAN_TEMPLATES, type PlanTemplate } from '../../lib/templates';
 
 export default function PlansScreen() {
-  const { plans, schedule, workouts, ready } = useStore();
+  const { plans, schedule, workouts, ready, saveWorkouts, savePlan } = useStore();
+
+  // Adds a fresh copy of a ready-made plan to this profile, then opens it to pick training days.
+  const addTemplate = (tpl: PlanTemplate) => {
+    const { plan, workouts: ws } = tpl.build();
+    saveWorkouts(ws);
+    savePlan(plan);
+    router.push({ pathname: '/plan/[id]', params: { id: plan.id } });
+  };
   const t = useTheme();
 
   return (
@@ -22,6 +31,30 @@ export default function PlansScreen() {
               <Button title="+ New plan" onPress={() => router.push({ pathname: '/plan-edit/[id]', params: { id: 'new' } })} />
               <Button title="Import" variant="secondary" onPress={() => router.push('/import')} />
             </View>
+          </View>
+        }
+        ListFooterComponent={
+          <View style={{ gap: 10, marginTop: 20 }}>
+            <H2>Ready-made plans</H2>
+            <Body muted style={{ fontSize: 13 }}>Adds your own copy, which you can edit freely.</Body>
+            {PLAN_TEMPLATES.map((tpl) => {
+              const have = plans.some((p) => p.name === tpl.name);
+              return (
+                <Card key={tpl.id} style={{ gap: 8 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <H2>{tpl.name}</H2>
+                    <Text style={{ color: t.primary, fontWeight: '800', fontSize: 12 }}>{tpl.daysPerWeek} DAYS/WEEK</Text>
+                  </View>
+                  <Body muted>{tpl.summary}</Body>
+                  <Button
+                    title={have ? 'Add another copy' : 'Add to my plans'}
+                    variant={have ? 'secondary' : 'primary'}
+                    onPress={() => addTemplate(tpl)}
+                    style={{ alignSelf: 'flex-start' }}
+                  />
+                </Card>
+              );
+            })}
           </View>
         }
         ListEmptyComponent={

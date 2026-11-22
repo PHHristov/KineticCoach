@@ -180,7 +180,10 @@ export class SquatAnalyzer implements PoseAnalyzer<RepResult> {
     ) * f.aspect;
     const ratio = width / torso;
     this.viewRatio = this.viewRatio === undefined ? ratio : this.viewRatio + (ratio - this.viewRatio) * 0.15;
-    this.view = this.viewRatio > 0.55 ? 'front' : this.viewRatio < 0.3 ? 'side' : 'angled';
+    // The camera doesn't move mid-rep: only re-judge the view between reps.
+    if (this.phase !== 'eccentric' && this.phase !== 'concentric') {
+      this.view = this.viewRatio > 0.55 ? 'front' : this.viewRatio < 0.3 ? 'side' : 'angled';
+    }
 
     // 3. Knee angle from 3D world landmarks (less sensitive to camera angle).
     const kneeL = angle3(w[L.leftHip], w[L.leftKnee], w[L.leftAnkle]);

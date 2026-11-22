@@ -4,6 +4,9 @@
  */
 
 export const L = {
+  nose: 0,
+  leftEar: 7,
+  rightEar: 8,
   leftShoulder: 11,
   rightShoulder: 12,
   leftElbow: 13,

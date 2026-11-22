@@ -25,9 +25,10 @@ function item(
   };
 }
 
+/** Each profile gets its own copies, so ids carry a unique suffix (database ids are global). */
 function workout(id: string, name: string, description: string, type: Workout['type'], items: WorkoutItem[]): Workout {
   const now = Date.now();
-  return { id, name, description, type, author: 'KineticCoach', items, createdAt: now, updatedAt: now };
+  return { id: `${id}-${uid()}`, name, description, type, author: 'KineticCoach', items, createdAt: now, updatedAt: now };
 }
 
 export function sampleWorkouts(): Workout[] {
@@ -72,7 +73,7 @@ export function samplePlanWithWorkouts(): { plan: Plan; workouts: Workout[] } {
   const now = Date.now();
   return {
     plan: {
-      id: 'sample-upper-lower',
+      id: `sample-upper-lower-${uid()}`,
       name: '4-day Upper/Lower split',
       description: 'Two upper-body and two lower-body days a week. Good for building strength.',
       author: 'KineticCoach',

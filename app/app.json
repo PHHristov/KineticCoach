@@ -9,7 +9,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kineticcoach.app",
-      "appleTeamId": "483V5ZV6G5"
+      "appleTeamId": "483V5ZV6G5",
+      "infoPlist": {
+        "NSCameraUsageDescription": "KineticCoach uses the camera to check your exercise form in real time. Video stays on your phone and is never uploaded."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,8 +30,17 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router",
-      "expo-font"
+      [
+        "expo-router",
+        {
+          "headers": {
+            "Cross-Origin-Embedder-Policy": "credentialless",
+            "Cross-Origin-Opener-Policy": "same-origin"
+          }
+        }
+      ],
+      "expo-font",
+      "expo-sqlite"
     ],
     "scheme": "kineticcoach",
     "experiments": {

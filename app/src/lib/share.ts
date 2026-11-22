@@ -12,7 +12,8 @@ import { uid } from './id';
 
 const VERSION = 1;
 
-type PackedItem = [string, string, 0 | 1, number, number, number, number, number, number];
+/** Last three (active rest) are optional, so links made before active rest existed still import. */
+type PackedItem = [string, string, 0 | 1, number, number, number, number, number, number, string?, string?, number?];
 type PackedWorkout = { n: string; d: string; t: WorkoutType; a: string; i: PackedItem[] };
 type PackedWorkoutCode = PackedWorkout & { v: number; k?: 'w' };
 type PackedPlanCode = { v: number; k: 'p'; n: string; d: string; a: string; w: PackedWorkout[] };
@@ -43,7 +44,7 @@ function packWorkout(w: Workout): PackedWorkout {
     d: w.description,
     t: w.type,
     a: w.author,
-    i: w.items.map((it) => [
+    i: w.items.map((it) => ([
       it.exerciseId,
       it.exerciseName,
       it.mode === 'reps' ? 0 : 1,
@@ -53,7 +54,8 @@ function packWorkout(w: Workout): PackedWorkout {
       it.weightKg,
       it.restBetweenSetsSec,
       it.restAfterSec,
-    ]),
+      ...(it.activeRest ? ([it.activeRest.exerciseId, it.activeRest.exerciseName, it.activeRest.sec] as const) : []),
+    ]) as PackedItem),
   };
 }
 
@@ -77,6 +79,10 @@ function unpackWorkout(raw: PackedWorkout): Workout {
     weightKg: Math.min(1000, Math.max(0, Math.round((Number(r[6]) || 0) * 100) / 100)),
     restBetweenSetsSec: num(r[7], 0, 3600),
     restAfterSec: num(r[8], 0, 3600),
+    activeRest:
+      typeof r[9] === 'string' && r[9] && Number(r[11]) > 0
+        ? { exerciseId: str(r[9], 80), exerciseName: str(r[10], 80) || 'Cardio', sec: num(r[11], 5, 600) }
+        : undefined,
   }));
   const now = Date.now();
   return {

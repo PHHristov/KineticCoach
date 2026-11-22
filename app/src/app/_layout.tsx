@@ -40,13 +40,15 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="exercises" options={{ title: 'Exercise library' }} />
           <Stack.Screen name="import" options={{ title: 'Import' }} />
+          <Stack.Screen name="profiles" options={{ title: 'Profiles', headerBackVisible: false, gestureEnabled: false, headerRight: () => null }} />
+          <Stack.Screen name="profile-edit" options={{ title: 'Profile', headerRight: () => null }} />
           <Stack.Screen name="workout/[id]" options={{ title: 'Workout' }} />
           <Stack.Screen name="edit/[id]" options={{ title: 'Edit workout' }} />
           <Stack.Screen name="plan/[id]" options={{ title: 'Plan' }} />
           <Stack.Screen name="plan-edit/[id]" options={{ title: 'Edit plan' }} />
           <Stack.Screen name="exercise/[id]" options={{ title: 'Exercise progress' }} />
-          <Stack.Screen name="play/[id]" options={{ headerShown: false, gestureEnabled: false }} />
-          <Stack.Screen name="form-check" options={{ headerShown: false, gestureEnabled: false }} />
+          <Stack.Screen name="play/[id]" options={{ headerShown: false, gestureEnabled: false, statusBarStyle: 'light' }} />
+          <Stack.Screen name="form-check" options={{ headerShown: false, gestureEnabled: false, statusBarStyle: 'light' }} />
         </Stack>
       </StoreProvider>
     </SafeAreaProvider>

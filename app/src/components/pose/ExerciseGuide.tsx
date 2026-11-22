@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -98,7 +99,7 @@ export function ExerciseGuide({
             How to: {name}
           </Text>
           <Pressable onPress={() => setVoiceOn((v) => !v)} accessibilityRole="button" accessibilityLabel={voiceOn ? 'Mute counting' : 'Count out loud'} style={pill}>
-            <Text style={pillText}>{voiceOn ? '🔊' : '🔇'}</Text>
+            <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={18} color="#fff" />
           </Pressable>
           <Pressable onPress={onClose} accessibilityRole="button" style={pill}>
             <Text style={pillText}>✕</Text>
@@ -148,8 +149,7 @@ export function ExerciseGuide({
             {phase.label}
           </Text>
           <Text style={{ color: '#fff', opacity: 0.8, fontSize: 16, fontVariant: ['tabular-nums'] }}>
-            {current?.count ? `${Array.from({ length: sec + 1 }, (_, i) => i + 1).join('… ')}…  (${current.sec} s)` : current ? `${current.sec} s` : ' '}
-            {'  ·  '}
+            {current ? (current.count ? `${Array.from({ length: sec + 1 }, (_, i) => i + 1).join('… ')}…  (${current.sec} s)  ·  ` : `${current.sec} s  ·  `) : ''}
             {guide.angleLabel} {angle}°
           </Text>
         </View>

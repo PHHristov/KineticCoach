@@ -3,7 +3,8 @@ import type { Point, Point3, PoseFrame } from '../../lib/pose/landmarks';
 export type CameraStatus =
   | { kind: 'starting'; message: string }
   | { kind: 'running' }
-  | { kind: 'error'; message: string };
+  /** action 'settings' = the fix is to allow the camera in the phone's Settings. */
+  | { kind: 'error'; message: string; action?: 'settings' };
 
 export type PoseCameraProps = {
   /** Called for every analysed video frame. Returns landmark indices to draw in red. */

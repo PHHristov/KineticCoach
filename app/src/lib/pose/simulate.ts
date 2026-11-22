@@ -143,6 +143,8 @@ export type CurlFault = {
   flare?: number;
   /** Shoulders rise at the top (image units). */
   shrug?: number;
+  /** Head tilts down at the top, e.g. looking at the hands (image units). */
+  headDrop?: number;
 };
 
 export type CurlSimOptions = {
@@ -154,6 +156,8 @@ export type CurlSimOptions = {
   topAngle: number;
   /** Elbow angle when the arm is down. */
   startAngle?: number;
+  /** Upper arm angle from vertical at rest, degrees (arms hanging slightly forward). Default 5. */
+  restArmAngle?: number;
   /** both = together, alternate = left then right, left = only the left arm moves. */
   arms?: 'both' | 'alternate' | 'left';
   fault?: CurlFault;
@@ -210,7 +214,7 @@ export function simulateCurlPose(
   ];
   for (const d of sides) {
     const arm = arms[d.s];
-    const drift = (((f.elbowDrift ?? 0) * arm.prog + 5) * Math.PI) / 180; // upper arm angle from vertical
+    const drift = (((f.elbowDrift ?? 0) * arm.prog + (o.restArmAngle ?? 5)) * Math.PI) / 180; // upper arm angle from vertical
     const theta = drift + ((180 - arm.e) * Math.PI) / 180; // forearm angle from straight down
     // Sagittal-plane positions (u = forward, v = down) for shoulder/elbow/wrist.
     const sh = { u: TRUNK * Math.sin(-lean), v: hipY - TRUNK * Math.cos(lean) - shrug };
@@ -241,6 +245,21 @@ export function simulateCurlPose(
       set(d.heel, 0.5 + d.sign * 0.06, hipY + 0.42, d.sign * 0.06, hipY + 0.42, 0.03);
       set(d.foot, 0.5 + d.sign * 0.07, hipY + 0.43, d.sign * 0.07, hipY + 0.43, -0.06);
     }
+  }
+  // Head: stays where it is when the shoulders shrug; drops when looking down at the hands.
+  const headY = hipY - TRUNK * Math.cos(lean) - 0.12 + (f.headDrop ?? 0) * progMax;
+  const headU = TRUNK * Math.sin(-lean);
+  const head: [number, number][] = [
+    [0, 0], // nose
+    [1, -0.015], [2, -0.025], [3, -0.035], // left eye inner, eye, outer
+    [4, 0.015], [5, 0.025], [6, 0.035], // right eye
+    [7, -0.05], [8, 0.05], // ears
+    [9, -0.012], [10, 0.012], // mouth
+  ];
+  for (const [i, dx] of head) {
+    const dy = i === 0 ? 0.01 : i >= 9 ? 0.03 : i >= 7 ? 0 : -0.01;
+    if (o.view === 'side') set(i, 0.5 + headU + 0.03 + dx * 0.2, headY + dy, headU, headY + dy, dx);
+    else set(i, 0.5 + dx, headY + dy, dx, headY + dy, -headU - 0.05);
   }
   return { image, world };
 }

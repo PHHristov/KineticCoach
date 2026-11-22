@@ -119,10 +119,17 @@ export const CURL_CONFIG = {
   elbowDrift: 25,
   /** Torso rocking from its resting lean, degrees. */
   swing: 12,
-  /** Elbow moving sideways, relative to upper-arm length. */
-  flare: 0.35,
-  /** Shoulder rising, relative to upper-arm length. */
-  shrug: 0.15,
+  /** Elbow moving sideways, relative to shoulder width (arm movement doesn't change shoulder width). */
+  flare: 0.28,
+  /**
+   * Shrug = shoulders rising towards the ears. Both must agree, so arm posture and looking down
+   * at the hands don't count: the shoulder-to-ear gap shrinks by this fraction…
+   */
+  shrugNeckDrop: 0.25,
+  /** …and the shoulder-to-hip distance grows by this fraction (skipped if the hips are out of view). */
+  shrugTorsoGain: 0.03,
+  /** Frames a shrug must last on top of the usual persistence (about a quarter second in all). */
+  shrugExtraFrames: 4,
   persistFrames: 4,
   cueCooldownSec: 2.5,
   /** Reps of both arms finishing this close together count as one. */
@@ -161,7 +168,9 @@ class Arm {
   upperArmBase?: number;
   leanBase?: number;
   flareBase?: number;
-  shoulderYBase?: number;
+  neckBase?: number;
+  torsoBase?: number;
+  shrugStreak = 0;
   constructor(readonly side: 'left' | 'right') {}
 }
 
@@ -221,7 +230,10 @@ export class CurlAnalyzer implements PoseAnalyzer<CurlRep> {
     const upperL = Math.max(1e-3, dist2(p[L.leftShoulder], p[L.leftElbow], f.aspect));
     const ratio = torso ? shoulderW / torso : shoulderW / (upperL * 1.6);
     this.viewRatio = this.viewRatio === undefined ? ratio : this.viewRatio + (ratio - this.viewRatio) * 0.15;
-    this.view = this.viewRatio > 0.55 ? 'front' : this.viewRatio < 0.3 ? 'side' : 'angled';
+    // The camera doesn't move mid-rep: only re-judge the view between reps. (A shrug or a lean
+    // changes the shoulder/torso ratio and would otherwise switch the front-view checks off.)
+    const inRep = Object.values(this.arms).some((a) => a.phase === 'concentric' || a.phase === 'eccentric');
+    if (!inRep) this.view = this.viewRatio > 0.55 ? 'front' : this.viewRatio < 0.3 ? 'side' : 'angled';
 
     const dt = this.lastT === undefined ? 1 / 30 : clamp((f.t - this.lastT) / 1000, 1 / 240, 0.25);
     this.lastT = f.t;
@@ -249,8 +261,13 @@ export class CurlAnalyzer implements PoseAnalyzer<CurlRep> {
     const upperArmAngle = leanFromVertical(p[idx.el], p[idx.sh], f.aspect); // 0 = hanging straight down
     const hip = vis(p[idx.hip]) > 0.4 ? p[idx.hip] : midHip;
     const lean = hip ? leanFromVertical(hip, p[idx.sh], f.aspect) * Math.sign((p[idx.sh].x - hip.x) || 1) : undefined;
-    const flare = Math.abs(p[idx.el].x - p[idx.sh].x) * f.aspect / upperLen;
-    const shoulderY = p[idx.sh].y / upperLen;
+    // Shoulder width is the yardstick for front-view checks: it doesn't change as the arms move.
+    const shoulderW = Math.max(1e-3, Math.abs(p[L.leftShoulder].x - p[L.rightShoulder].x) * f.aspect);
+    const flare = (Math.abs(p[idx.el].x - p[idx.sh].x) * f.aspect) / shoulderW;
+    const shMidY = (p[L.leftShoulder].y + p[L.rightShoulder].y) / 2;
+    const earsVisible = Math.min(vis(p[L.leftEar]), vis(p[L.rightEar])) > 0.5;
+    const neck = earsVisible ? (shMidY - (p[L.leftEar].y + p[L.rightEar].y) / 2) / shoulderW : undefined;
+    const torsoLen = hipsVisibleBoth(p) ? ((p[L.leftHip].y + p[L.rightHip].y) / 2 - shMidY) / shoulderW : undefined;
 
     switch (arm.phase) {
       case 'get-ready': {
@@ -279,7 +296,8 @@ export class CurlAnalyzer implements PoseAnalyzer<CurlRep> {
           arm.upperArmBase = ema(arm.upperArmBase, upperArmAngle);
           if (lean !== undefined) arm.leanBase = ema(arm.leanBase, lean);
           arm.flareBase = ema(arm.flareBase, flare);
-          arm.shoulderYBase = ema(arm.shoulderYBase, shoulderY);
+          if (neck !== undefined) arm.neckBase = ema(arm.neckBase, neck);
+          if (torsoLen !== undefined) arm.torsoBase = ema(arm.torsoBase, torsoLen);
         }
         arm.bentFrames = angle < arm.bottomRef - CURL_CONFIG.startRepBend ? arm.bentFrames + 1 : 0;
         if (arm.bentFrames >= CURL_CONFIG.startFrames) {
@@ -329,7 +347,11 @@ export class CurlAnalyzer implements PoseAnalyzer<CurlRep> {
         const flaring = arm.flareBase !== undefined && flare - arm.flareBase > CURL_CONFIG.flare;
         this.check(arm, 'elbow-flare', flaring, f.t, events);
         if (flaring) this.badJoints.push(idx.sh, idx.el);
-        const shrugging = arm.shoulderYBase !== undefined && arm.shoulderYBase - shoulderY > CURL_CONFIG.shrug;
+        const neckShrank = neck !== undefined && arm.neckBase !== undefined && neck < arm.neckBase * (1 - CURL_CONFIG.shrugNeckDrop);
+        const torsoGrew =
+          torsoLen === undefined || arm.torsoBase === undefined || torsoLen > arm.torsoBase * (1 + CURL_CONFIG.shrugTorsoGain);
+        arm.shrugStreak = neckShrank && torsoGrew ? arm.shrugStreak + 1 : 0;
+        const shrugging = arm.shrugStreak > CURL_CONFIG.shrugExtraFrames;
         this.check(arm, 'shrug', shrugging, f.t, events);
         if (shrugging) this.badJoints.push(L.leftShoulder, L.rightShoulder);
       } else {
@@ -478,6 +500,10 @@ export class CurlAnalyzer implements PoseAnalyzer<CurlRep> {
       inRep,
     };
   }
+}
+
+function hipsVisibleBoth(p: Point[]): boolean {
+  return Math.min(vis(p[L.leftHip]), vis(p[L.rightHip])) > 0.4;
 }
 
 export function curlRepSpeech(rep: CurlRep): string {

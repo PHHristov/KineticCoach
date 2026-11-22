@@ -1,7 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/tabs';
+import { Text, View } from 'react-native';
 import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
+import { useStore } from '../../lib/store';
 import { useTheme } from '../../components/ui';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -14,6 +17,20 @@ function icon(name: IconName, active: IconName) {
 
 export default function TabsLayout() {
   const t = useTheme();
+  const { ready, error, user, needsProfilePick } = useStore();
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: t.bg }} />;
+  if (error) {
+    return (
+      <View style={{ flex: 1, backgroundColor: t.bg, padding: 24, justifyContent: 'center', gap: 8 }}>
+        <Text style={{ color: t.text, fontSize: 20, fontWeight: '800' }}>Couldn't open your data</Text>
+        <Text style={{ color: t.muted, fontSize: 15 }}>{error}</Text>
+      </View>
+    );
+  }
+  if (!user) return <Redirect href={{ pathname: '/profile-edit', params: { id: 'new', first: '1' } }} />;
+  if (needsProfilePick) return <Redirect href="/profiles" />;
+
   return (
     <Tabs
       screenOptions={{

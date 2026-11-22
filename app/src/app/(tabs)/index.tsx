@@ -19,7 +19,7 @@ import { formatKg, volumeSummary } from '../../lib/stats';
 import { useStore } from '../../lib/store';
 
 export default function HomeScreen() {
-  const { ready, schedule, plans, workouts, history } = useStore();
+  const { ready, schedule, plans, workouts, history, user } = useStore();
   const t = useTheme();
   const today = startOfDay(new Date());
   const plan = plans.find((p) => p.id === schedule?.planId);
@@ -44,7 +44,7 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 32, maxWidth: 720, width: '100%', alignSelf: 'center' }}>
         <View>
           <Body muted>{today.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</Body>
-          <H1>{next && sameDay(next.date, today) ? 'Training day 💪' : 'Welcome back'}</H1>
+          <H1>{next && sameDay(next.date, today) ? `Training day, ${user?.name ?? ''}` : `Welcome back${user ? `, ${user.name}` : ''}`}</H1>
         </View>
 
         {/* weight summary */}

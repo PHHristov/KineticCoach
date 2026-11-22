@@ -5,7 +5,7 @@ import { useShare } from '../../components/ShareButton';
 import { Body, Button, Card, Chip, H1, H2, Screen, useTheme } from '../../components/ui';
 import { confirm } from '../../lib/confirm';
 import { clone, formatDuration, uid } from '../../lib/id';
-import { describeSet, estimateWorkout } from '../../lib/plan';
+import { describeRest, describeSet, estimateWorkout } from '../../lib/plan';
 import { formExerciseFor } from '../../lib/pose/exercises';
 import { shareLink } from '../../lib/share';
 import { useStore } from '../../lib/store';
@@ -32,7 +32,9 @@ export default function WorkoutDetail() {
   const inPlans = plans.filter((p) => p.workoutIds.includes(workout.id));
 
   const onDuplicate = () => {
-    const copy = { ...clone(workout), id: uid(), name: `${workout.name} (copy)`, createdAt: Date.now() };
+    const base = clone(workout);
+    // Every exercise row needs its own id too (they are unique in the database).
+    const copy = { ...base, id: uid(), name: `${workout.name} (copy)`, createdAt: Date.now(), items: base.items.map((it) => ({ ...it, id: uid() })) };
     saveWorkout(copy);
     router.replace({ pathname: '/workout/[id]', params: { id: copy.id } });
   };
@@ -88,7 +90,7 @@ export default function WorkoutDetail() {
                 </Text>
                 <Body muted>
                   {describeSet(item)}
-                  {item.sets > 1 ? ` · ${item.restBetweenSetsSec}s rest between sets` : ''}
+                  {describeRest(item) ? ` · ${describeRest(item)}` : ''}
                 </Body>
                 {formExerciseFor(item.exerciseId) ? (
                   <Text

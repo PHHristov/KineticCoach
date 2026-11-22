@@ -24,6 +24,8 @@ export type Step =
       next: WorkoutItem;
       nextSetNumber: number;
       betweenExercises: boolean;
+      /** Cardio to do during this rest (active rest), if any. */
+      active?: { exerciseId: string; exerciseName: string };
     };
 
 /** Flattens a workout into the ordered list of steps the player walks through. */
@@ -45,7 +47,17 @@ export function buildSteps(workout: Workout, prepSec: number): Step[] {
       });
       const isLastSet = set === item.sets;
       const nextItem = items[itemIndex + 1];
-      if (!isLastSet && item.restBetweenSetsSec > 0) {
+      const active = item.activeRest && item.activeRest.sec > 0 ? item.activeRest : undefined;
+      if (!isLastSet && active) {
+        steps.push({
+          kind: 'rest',
+          durationSec: active.sec,
+          next: item,
+          nextSetNumber: set + 1,
+          betweenExercises: false,
+          active: { exerciseId: active.exerciseId, exerciseName: active.exerciseName },
+        });
+      } else if (!isLastSet && item.restBetweenSetsSec > 0) {
         steps.push({
           kind: 'rest',
           durationSec: item.restBetweenSetsSec,
@@ -93,4 +105,11 @@ export function describeSet(item: WorkoutItem): string {
   return item.mode === 'reps'
     ? `${item.sets} × ${item.reps} reps${load}`
     : `${item.sets} × ${item.durationSec}s${load}`;
+}
+
+/** "30s rest between sets" or "60s jump rope between sets" (active rest). */
+export function describeRest(item: WorkoutItem): string {
+  if (item.sets <= 1) return '';
+  if (item.activeRest && item.activeRest.sec > 0) return `${item.activeRest.sec}s ${item.activeRest.exerciseName.toLowerCase()} between sets`;
+  return `${item.restBetweenSetsSec}s rest between sets`;
 }

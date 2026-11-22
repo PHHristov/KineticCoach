@@ -10,12 +10,24 @@ export const BUILT_IN_EXERCISES: Exercise[] = [
   { id: 'overhead-press', name: 'Overhead press', category: 'Upper body', defaultMode: 'reps' },
   { id: 'bent-over-row', name: 'Bent-over row', category: 'Upper body', defaultMode: 'reps' },
   { id: 'bicep-curl', name: 'Bicep curl', category: 'Upper body', defaultMode: 'reps' },
+  { id: 'hammer-curl', name: 'Hammer curl', category: 'Upper body', defaultMode: 'reps', description: 'Palms facing each other, curl without swinging.' },
+  { id: 'incline-dumbbell-press', name: 'Incline dumbbell press', category: 'Upper body', defaultMode: 'reps', description: 'Bench at 30–45°, press the dumbbells up over the upper chest.' },
+  { id: 'cable-fly', name: 'Cable fly', category: 'Upper body', defaultMode: 'reps' },
+  { id: 'lateral-raise', name: 'Lateral raise', category: 'Upper body', defaultMode: 'reps', description: 'Raise the dumbbells out to the sides to shoulder height, slight bend in the elbows.' },
+  { id: 'triceps-pushdown', name: 'Triceps pushdown', category: 'Upper body', defaultMode: 'reps', description: 'Elbows pinned to your sides, push the cable down until the arms are straight.' },
+  { id: 'lat-pulldown', name: 'Lat pulldown', category: 'Upper body', defaultMode: 'reps', description: 'Pull the bar to the top of the chest, squeezing the shoulder blades down.' },
+  { id: 'seated-cable-row', name: 'Seated cable row', category: 'Upper body', defaultMode: 'reps' },
+  { id: 'face-pull', name: 'Face pull', category: 'Upper body', defaultMode: 'reps', description: 'Rope at face height, pull towards your eyes with elbows high.' },
 
   { id: 'squat', name: 'Squat', category: 'Lower body', defaultMode: 'reps', description: 'Feet shoulder-width apart, hips back and down, knees track the toes.' },
   { id: 'lunge', name: 'Lunge', category: 'Lower body', defaultMode: 'reps', description: 'Step forward, lower the back knee towards the floor, alternate legs.' },
   { id: 'glute-bridge', name: 'Glute bridge', category: 'Lower body', defaultMode: 'reps' },
   { id: 'deadlift', name: 'Deadlift', category: 'Lower body', defaultMode: 'reps' },
   { id: 'calf-raise', name: 'Calf raise', category: 'Lower body', defaultMode: 'reps' },
+  { id: 'leg-press', name: 'Leg press', category: 'Lower body', defaultMode: 'reps' },
+  { id: 'romanian-deadlift', name: 'Romanian deadlift', category: 'Lower body', defaultMode: 'reps', description: 'Soft knees, push the hips back and lower the bar along the legs until the hamstrings stretch.' },
+  { id: 'leg-curl', name: 'Leg curl', category: 'Lower body', defaultMode: 'reps' },
+  { id: 'leg-extension', name: 'Leg extension', category: 'Lower body', defaultMode: 'reps' },
   { id: 'wall-sit', name: 'Wall sit', category: 'Lower body', defaultMode: 'time' },
   { id: 'jump-squat', name: 'Jump squat', category: 'Lower body', defaultMode: 'reps' },
 
@@ -40,3 +52,8 @@ export const BUILT_IN_EXERCISES: Exercise[] = [
   { id: 'hip-flexor-stretch', name: 'Hip flexor stretch', category: 'Mobility', defaultMode: 'time' },
   { id: 'worlds-greatest-stretch', name: "World's greatest stretch", category: 'Mobility', defaultMode: 'reps' },
 ];
+
+/** Cardio exercises offered for active rest (a burst of cardio instead of resting between sets). */
+export const ACTIVE_REST_EXERCISES: Exercise[] = ['jump-rope', 'jumping-jack', 'high-knees', 'mountain-climber', 'burpee'].map(
+  (id) => BUILT_IN_EXERCISES.find((e) => e.id === id)!,
+);

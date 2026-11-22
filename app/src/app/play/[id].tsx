@@ -30,6 +30,7 @@ function announce(step: Step): string {
         ? `Set ${step.setNumber} of ${step.item.sets}. ${workPhrase(step.item)}. Go!`
         : `${workPhrase(step.item)}. Go!`;
     case 'rest':
+      if (step.active) return `${step.active.exerciseName}, ${step.durationSec} seconds. Keep moving!`;
       return step.betweenExercises
         ? `Rest ${step.durationSec} seconds. Next: ${step.next.exerciseName}.`
         : `Rest ${step.durationSec} seconds.`;
@@ -251,7 +252,8 @@ export default function Player() {
     );
   }
 
-  const color = step.kind === 'work' ? t.work : step.kind === 'rest' ? t.rest : t.prep;
+  // Active rest (cardio between sets) gets the "get ready" purple so it reads as work, not a break.
+  const color = step.kind === 'work' ? t.work : step.kind === 'rest' ? (step.active ? t.prep : t.rest) : t.prep;
   const stepFraction = duration ? Math.min(1, elapsed / duration) : 0;
 
   return (
@@ -273,7 +275,9 @@ export default function Player() {
 
         {/* main */}
         <View style={{ flexGrow: 1, flexShrink: 0, justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
-          <Text style={big.label}>{step.kind === 'work' ? 'WORK' : step.kind === 'rest' ? 'REST' : 'GET READY'}</Text>
+          <Text style={big.label}>
+            {step.kind === 'work' ? 'WORK' : step.kind === 'rest' ? (step.active ? 'ACTIVE REST' : 'REST') : 'GET READY'}
+          </Text>
           {step.kind === 'work' ? (
             <>
               <Text style={big.title} accessibilityRole="header">{step.item.exerciseName}</Text>
@@ -301,9 +305,13 @@ export default function Player() {
             </>
           ) : (
             <>
+              {step.kind === 'rest' && step.active ? (
+                <Text style={big.title} accessibilityRole="header">{step.active.exerciseName}</Text>
+              ) : null}
               <Text style={big.timer} accessibilityLiveRegion="polite">{formatDuration(Math.ceil(remaining ?? 0))}</Text>
               <Text style={big.sub}>
-                Next: {step.next.exerciseName}
+                {step.kind === 'rest' && step.active ? 'Then: ' : 'Next: '}
+                {step.next.exerciseName}
                 {step.kind === 'rest' && step.next.sets > 1 ? ` · set ${step.nextSetNumber} of ${step.next.sets}` : ''}
               </Text>
               {step.kind === 'rest' ? (

@@ -1,10 +1,12 @@
+import { router } from 'expo-router';
 import { ScrollView, Switch, Text, View } from 'react-native';
-import { Body, Button, Card, Field, H2, Screen, Stepper, useTheme } from '../../components/ui';
+import { Avatar } from '../../components/Avatar';
+import { Body, Button, Card, H2, Screen, Stepper, useTheme } from '../../components/ui';
 import { say, setVoiceEnabled } from '../../lib/voice';
 import { useStore } from '../../lib/store';
 
 export default function SettingsScreen() {
-  const { settings, updateSettings } = useStore();
+  const { settings, updateSettings, user, users } = useStore();
   const t = useTheme();
 
   const Toggle = ({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) => (
@@ -20,15 +22,24 @@ export default function SettingsScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, maxWidth: 720, width: '100%', alignSelf: 'center' }}>
-        <Card>
-          <H2>Profile</H2>
-          <Field
-            label="Display name"
-            value={settings.displayName}
-            onChangeText={(displayName) => updateSettings({ displayName })}
-            placeholder="Shown as the author of workouts you share"
-          />
-        </Card>
+        {user ? (
+          <Card style={{ gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Avatar name={user.name} size={52} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.text, fontSize: 20, fontWeight: '800' }}>{user.name}</Text>
+                <Body muted style={{ fontSize: 13 }}>
+                  {[user.weightKg && `${user.weightKg} kg`, user.heightCm && `${user.heightCm} cm`].filter(Boolean).join(' · ') ||
+                    'Shown as the author of workouts you share'}
+                </Body>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              <Button title="Edit profile" variant="secondary" onPress={() => router.push({ pathname: '/profile-edit', params: { id: user.id } })} />
+              <Button title={users.length > 1 ? 'Switch profile' : 'Add a profile'} variant="secondary" onPress={() => router.push(users.length > 1 ? '/profiles' : { pathname: '/profile-edit', params: { id: 'new' } })} />
+            </View>
+          </Card>
+        ) : null}
         <Card style={{ gap: 14 }}>
           <H2>Voice coach</H2>
           <Toggle

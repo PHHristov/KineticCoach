@@ -59,7 +59,7 @@ export const FORM_EXERCISES: FormExercise[] = [
   {
     id: 'bicep-curl',
     name: 'Bicep curl',
-    exerciseIds: ['bicep-curl'],
+    exerciseIds: ['bicep-curl', 'hammer-curl'],
     create: () => new CurlAnalyzer(),
     issues: CURL_ISSUES,
     checksByView: CURL_CHECKS_BY_VIEW,

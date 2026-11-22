@@ -49,6 +49,17 @@ export interface WorkoutItem {
   restBetweenSetsSec: number;
   /** Rest after the last set, before the next exercise. */
   restAfterSec: number;
+  /**
+   * Active rest ("cardio acceleration"): instead of resting between sets, do this cardio
+   * exercise for `sec` seconds. Replaces restBetweenSetsSec when set.
+   */
+  activeRest?: ActiveRest;
+}
+
+export interface ActiveRest {
+  exerciseId: string;
+  exerciseName: string;
+  sec: number;
 }
 
 export interface Workout {
@@ -122,4 +133,47 @@ export interface Schedule {
   /** Weekdays, 0 = Monday … 6 = Sunday, sorted. days[i] runs plan.workoutIds[i]. */
   days: number[];
   startedAt: number;
+}
+
+export type Goal = 'strength' | 'muscle' | 'fitness' | 'weight-loss' | 'mobility';
+export type Experience = 'beginner' | 'intermediate' | 'advanced';
+
+/** A person using the app on this device. Body data is optional. */
+export interface UserProfile {
+  id: string;
+  name: string;
+  weightKg?: number;
+  heightCm?: number;
+  birthYear?: number;
+  goal?: Goal;
+  experience?: Experience;
+  createdAt: number;
+  lastActiveAt: number;
+}
+
+/** One rep's result from a camera form check, as stored. */
+export interface FormCheckRepRecord {
+  n: number;
+  side?: string;
+  view: string;
+  score: number;
+  rangeLabel: string;
+  rangeGood: boolean;
+  romDeg: number;
+  eccentricSec: number;
+  concentricSec: number;
+  eccentric: string;
+  concentric: string;
+  issues: string[];
+  detail: string;
+}
+
+export interface FormCheckRecord {
+  id: string;
+  exercise: string;
+  startedAt: number;
+  finishedAt: number;
+  reps: FormCheckRepRecord[];
+  /** Rep counter (left + right = one rep for curls), which can differ from reps.length. */
+  count: number;
 }

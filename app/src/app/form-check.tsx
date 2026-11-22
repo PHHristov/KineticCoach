@@ -1,6 +1,8 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ExerciseGuide } from '../components/pose/ExerciseGuide';
 import PoseCamera from '../components/pose/PoseCamera';
@@ -9,6 +11,7 @@ import type { LiveState, RepBase, Tempo, View as CamView } from '../lib/pose/ana
 import { FORM_EXERCISES, formExercise, type FormExercise } from '../lib/pose/exercises';
 import type { PoseFrame } from '../lib/pose/landmarks';
 import { useScreenAwake } from '../lib/keepAwake';
+import { uid } from '../lib/id';
 import { useStore } from '../lib/store';
 import { say, setVoiceEnabled, stopVoice } from '../lib/voice';
 
@@ -22,7 +25,7 @@ const VIEW_LABEL: Record<CamView, string> = { side: 'Side view', front: 'Front v
 export default function FormCheckScreen() {
   useScreenAwake();
   const insets = useSafeAreaInsets();
-  const { settings } = useStore();
+  const { settings, saveFormCheck } = useStore();
   const params = useLocalSearchParams<{ demo?: string; exercise?: string; guide?: string }>();
   const demoMode = params.demo === '1';
   const [exerciseId, setExerciseId] = useState(formExercise(params.exercise).id);
@@ -39,6 +42,14 @@ export default function FormCheckScreen() {
   const [showSummary, setShowSummary] = useState(false);
   const [showGuide, setShowGuide] = useState(params.guide === '1');
   const lastUi = useRef(0);
+
+  // A link opened while this screen is already showing (e.g. from a workout) can switch exercise or open the guide.
+  useEffect(() => {
+    if (params.exercise) setExerciseId(formExercise(params.exercise).id);
+  }, [params.exercise]);
+  useEffect(() => {
+    if (params.guide === '1') setShowGuide(true);
+  }, [params.guide]);
 
   useEffect(() => setVoiceEnabled(voiceOn), [voiceOn]);
   useEffect(() => () => stopVoice(), []);
@@ -94,11 +105,60 @@ export default function FormCheckScreen() {
     [analyzer, ex],
   );
 
+  // Results are saved to the active profile once per set (Finish, or leaving with reps done).
+  const startedAt = useRef(Date.now());
+  const saved = useRef(false);
+  const saveResults = () => {
+    if (saved.current || demoMode || !reps.length) return;
+    saved.current = true;
+    saveFormCheck({
+      id: uid(),
+      exercise: ex.id,
+      startedAt: startedAt.current,
+      finishedAt: Date.now(),
+      count: live?.reps ?? reps.length,
+      reps: reps.map((r) => ({
+        n: r.n,
+        side: r.side,
+        view: r.view,
+        score: r.score,
+        rangeLabel: r.range.label,
+        rangeGood: r.range.good,
+        romDeg: r.romDeg,
+        eccentricSec: r.eccentricSec,
+        concentricSec: r.concentricSec,
+        eccentric: r.eccentric,
+        concentric: r.concentric,
+        issues: r.issues,
+        detail: r.detail,
+      })),
+    });
+  };
+  const finish = () => {
+    saveResults();
+    setShowSummary(true);
+  };
+  const close = () => {
+    saveResults();
+    router.back();
+  };
+
   const reset = () => {
     analyzer.reset();
     setReps([]);
     setLive(null);
     setShowSummary(false);
+    saved.current = false;
+    startedAt.current = Date.now();
+  };
+
+  // Switching exercise mid-way saves what was done so far before starting fresh.
+  const switchExercise = (id: FormExercise['id']) => {
+    if (id === ex.id) return;
+    saveResults();
+    saved.current = false;
+    startedAt.current = Date.now();
+    setExerciseId(id);
   };
 
   const phase = live?.phase ?? 'get-ready';
@@ -107,14 +167,18 @@ export default function FormCheckScreen() {
   const bodyInView = phase !== 'not-visible' && live?.metric !== undefined;
   const lastRep = reps[reps.length - 1];
 
+  // The form check screens are dark: keep the clock and battery readable.
+  const statusBar = <StatusBar style="light" />;
+
   if (showGuide)
-    return <ExerciseGuide name={ex.name} guide={ex.guide} joint={ex.guideJoint} voice={voiceOn} onClose={() => setShowGuide(false)} />;
+    return <>{statusBar}<ExerciseGuide name={ex.name} guide={ex.guide} joint={ex.guideJoint} voice={voiceOn} onClose={() => setShowGuide(false)} /></>;
 
   if (showSummary)
-    return <Summary ex={ex} reps={reps} count={live?.reps ?? reps.length} perSide={live?.perSide} onGuide={() => setShowGuide(true)} onAgain={reset} onClose={() => router.back()} insets={insets} />;
+    return <>{statusBar}<Summary ex={ex} reps={reps} count={live?.reps ?? reps.length} perSide={live?.perSide} onGuide={() => setShowGuide(true)} onAgain={reset} onClose={close} insets={insets} /></>;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
+      {statusBar}
       <PoseCamera
         key={ex.id}
         onFrame={onFrame}
@@ -127,14 +191,14 @@ export default function FormCheckScreen() {
       {/* top bar */}
       <View style={{ position: 'absolute', top: insets.top + 10, left: 12, right: 12, gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Pill label="✕ Close" onPress={() => router.back()} />
+          <Pill label="✕ Close" onPress={close} />
           <View style={{ flex: 1 }} />
           <Pill label="How?" onPress={() => setShowGuide(true)} a11y={`How to do a ${ex.name.toLowerCase()}`} />
-          <Pill label={voiceOn ? '🔊' : '🔇'} onPress={() => setVoiceOn((v) => !v)} a11y={voiceOn ? 'Mute voice' : 'Unmute voice'} />
-          {Platform.OS === 'web' && !demoMode ? (
-            <Pill label="⟲" onPress={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} a11y="Switch camera" />
+          <Pill icon={voiceOn ? 'volume-high' : 'volume-mute'} onPress={() => setVoiceOn((v) => !v)} a11y={voiceOn ? 'Mute voice' : 'Unmute voice'} />
+          {(Platform.OS === 'web' || Platform.OS === 'ios') && !demoMode && status.kind === 'running' ? (
+            <Pill icon="camera-reverse-outline" onPress={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} a11y="Switch camera" />
           ) : null}
-          <Pill label="Finish" onPress={() => setShowSummary(true)} strong />
+          <Pill label="Finish" onPress={finish} strong />
         </View>
         <View style={{ flexDirection: 'row', alignSelf: 'center', backgroundColor: PANEL, borderRadius: 999, padding: 3 }} accessibilityRole="tablist">
           {FORM_EXERCISES.map((e) => {
@@ -142,7 +206,7 @@ export default function FormCheckScreen() {
             return (
               <Pressable
                 key={e.id}
-                onPress={() => setExerciseId(e.id)}
+                onPress={() => switchExercise(e.id)}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
                 aria-selected={on}
@@ -201,7 +265,20 @@ export default function FormCheckScreen() {
   );
 }
 
-function Pill({ label, onPress, strong, a11y }: { label: string; onPress: () => void; strong?: boolean; a11y?: string }) {
+function Pill({
+  label,
+  icon,
+  onPress,
+  strong,
+  a11y,
+}: {
+  label?: string;
+  /** An icon instead of text (emoji don't render reliably in bold on every platform). */
+  icon?: 'volume-high' | 'volume-mute' | 'camera-reverse-outline';
+  onPress: () => void;
+  strong?: boolean;
+  a11y?: string;
+}) {
   return (
     <Pressable
       onPress={onPress}
@@ -209,7 +286,11 @@ function Pill({ label, onPress, strong, a11y }: { label: string; onPress: () => 
       accessibilityLabel={a11y ?? label}
       style={{ backgroundColor: strong ? '#fff' : PANEL, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 }}
     >
-      <Text style={{ color: strong ? '#111' : '#fff', fontWeight: '800', fontSize: 14 }}>{label}</Text>
+      {icon ? (
+        <Ionicons name={icon} size={18} color={strong ? '#111' : '#fff'} />
+      ) : (
+        <Text style={{ color: strong ? '#111' : '#fff', fontWeight: '800', fontSize: 14 }}>{label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -272,7 +353,18 @@ function SetupCard({
           <Text style={{ color: '#fff', fontWeight: '900' }}>▶ See how a perfect {ex.name.toLowerCase()} looks</Text>
         </Pressable>
         {status.kind === 'error' ? (
-          <Text style={{ color: '#fff', opacity: 0.9, fontSize: 15, lineHeight: 21 }}>{status.message}</Text>
+          <>
+            <Text style={{ color: '#fff', opacity: 0.9, fontSize: 15, lineHeight: 21 }}>{status.message}</Text>
+            {status.action === 'settings' ? (
+              <Pressable
+                onPress={() => Linking.openSettings()}
+                accessibilityRole="button"
+                style={{ alignSelf: 'flex-start', backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9, marginTop: 4 }}
+              >
+                <Text style={{ color: '#111', fontWeight: '900' }}>Open Settings</Text>
+              </Pressable>
+            ) : null}
+          </>
         ) : (
           <>
             {ex.setupTips.map((tip) => (

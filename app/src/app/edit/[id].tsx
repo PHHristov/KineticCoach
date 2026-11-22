@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ExerciseLibrary } from '../../components/ExerciseLibrary';
 import { Body, Button, Card, Chip, Field, H2, Screen, Stepper, useTheme } from '../../components/ui';
 import { clone, formatDuration, uid } from '../../lib/id';
-import { describeSet, estimateWorkout } from '../../lib/plan';
+import { ACTIVE_REST_EXERCISES } from '../../lib/exercises';
+import { describeRest, describeSet, estimateWorkout } from '../../lib/plan';
 import { useStore } from '../../lib/store';
 import { WORKOUT_TYPES, type Exercise, type Workout, type WorkoutItem } from '../../lib/types';
 
@@ -166,8 +167,9 @@ function ItemEditor({
           <View style={{ flex: 1 }}>
             <Text style={{ color: t.text, fontWeight: '700', fontSize: 16 }}>{item.exerciseName}</Text>
             <Body muted style={{ fontSize: 13 }}>
-              {describeSet(item)} · rest {item.restBetweenSetsSec}s
-              {!isLast && item.restAfterSec > 0 ? ` · then ${item.restAfterSec}s` : ''}
+              {[describeSet(item), describeRest(item), !isLast && item.restAfterSec > 0 ? `then ${item.restAfterSec}s rest` : '']
+                .filter(Boolean)
+                .join(' · ')}
             </Body>
           </View>
           <Text style={{ color: t.primary, fontWeight: '700' }}>{expanded ? 'Close' : 'Edit'}</Text>
@@ -188,11 +190,42 @@ function ItemEditor({
               <Stepper label="Duration" suffix="s" step={5} value={item.durationSec} min={5} max={3600} onChange={(durationSec) => onChange({ durationSec })} />
             )}
             <Stepper label="Weight" suffix="kg" step={2.5} value={item.weightKg} min={0} max={1000} onChange={(weightKg) => onChange({ weightKg })} />
-            <Stepper label="Rest between sets" suffix="s" step={5} value={item.restBetweenSetsSec} min={0} max={3600} onChange={(restBetweenSetsSec) => onChange({ restBetweenSetsSec })} />
+            {item.activeRest ? (
+              <Stepper
+                label={`${item.activeRest.exerciseName} between sets`}
+                suffix="s"
+                step={5}
+                value={item.activeRest.sec}
+                min={10}
+                max={600}
+                onChange={(sec) => onChange({ activeRest: { ...item.activeRest!, sec } })}
+              />
+            ) : (
+              <Stepper label="Rest between sets" suffix="s" step={5} value={item.restBetweenSetsSec} min={0} max={3600} onChange={(restBetweenSetsSec) => onChange({ restBetweenSetsSec })} />
+            )}
             {!isLast ? (
               <Stepper label="Rest after exercise" suffix="s" step={5} value={item.restAfterSec} min={0} max={3600} onChange={(restAfterSec) => onChange({ restAfterSec })} />
             ) : null}
           </View>
+          {item.sets > 1 ? (
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: t.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Between sets
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                <Chip label="Rest" active={!item.activeRest} onPress={() => onChange({ activeRest: undefined })} />
+                {ACTIVE_REST_EXERCISES.map((e) => (
+                  <Chip
+                    key={e.id}
+                    label={e.name}
+                    active={item.activeRest?.exerciseId === e.id}
+                    onPress={() => onChange({ activeRest: { exerciseId: e.id, exerciseName: e.name, sec: item.activeRest?.sec ?? 60 } })}
+                  />
+                ))}
+              </View>
+              <Body muted style={{ fontSize: 12 }}>Active rest: a cardio burst instead of resting keeps your heart rate up.</Body>
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <Button title="↑ Up" variant="secondary" disabled={index === 0} onPress={() => onMove(-1)} />
             <Button title="↓ Down" variant="secondary" disabled={index === count - 1} onPress={() => onMove(1)} />
