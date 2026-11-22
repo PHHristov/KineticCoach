@@ -1,13 +1,13 @@
 import { Link, router } from 'expo-router';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Body, Button, Card, H1, H2, Screen, useTheme } from '../components/ui';
-import { formatDuration } from '../lib/id';
-import { estimateWorkout } from '../lib/plan';
-import { useStore } from '../lib/store';
+import { Body, Button, Card, H1, H2, Screen, useTheme } from '../../components/ui';
+import { formatDuration } from '../../lib/id';
+import { estimateWorkout } from '../../lib/plan';
+import { useStore } from '../../lib/store';
 
-export default function Home() {
-  const { workouts, history, ready } = useStore();
+export default function WorkoutsScreen() {
+  const { workouts, ready } = useStore();
   const t = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -19,18 +19,12 @@ export default function Home() {
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 + insets.bottom, maxWidth: 720, width: '100%', alignSelf: 'center' }}
         ListHeaderComponent={
           <View style={{ gap: 12, marginBottom: 4 }}>
-            <H1>Your workouts</H1>
+            <H1>Workouts</H1>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               <Button title="+ New workout" onPress={() => router.push('/edit/new')} />
               <Button title="Import" variant="secondary" onPress={() => router.push('/import')} />
-              <Button title="Exercises" variant="secondary" onPress={() => router.push('/exercises')} />
-              <Button title="Settings" variant="secondary" onPress={() => router.push('/settings')} />
+              <Button title="Exercise library" variant="secondary" onPress={() => router.push('/exercises')} />
             </View>
-            {history.length > 0 ? (
-              <Body muted>
-                {history.length} workout{history.length === 1 ? '' : 's'} completed · last: {history[0].workoutName}
-              </Body>
-            ) : null}
           </View>
         }
         ListEmptyComponent={

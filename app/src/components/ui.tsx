@@ -67,9 +67,23 @@ export function H2({ children }: { children: React.ReactNode }) {
   return <Text style={[styles.h2, { color: t.text }]}>{children}</Text>;
 }
 
-export function Body({ children, muted, style }: { children: React.ReactNode; muted?: boolean; style?: any }) {
+export function Body({
+  children,
+  muted,
+  style,
+  numberOfLines,
+}: {
+  children: React.ReactNode;
+  muted?: boolean;
+  style?: any;
+  numberOfLines?: number;
+}) {
   const t = useTheme();
-  return <Text style={[{ color: muted ? t.muted : t.text, fontSize: 15, lineHeight: 21 }, style]}>{children}</Text>;
+  return (
+    <Text numberOfLines={numberOfLines} style={[{ color: muted ? t.muted : t.text, fontSize: 15, lineHeight: 21 }, style]}>
+      {children}
+    </Text>
+  );
 }
 
 type ButtonProps = {

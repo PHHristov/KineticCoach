@@ -1,7 +1,7 @@
 import { ScrollView, Switch, Text, View } from 'react-native';
-import { Body, Button, Card, Field, H2, Screen, Stepper, useTheme } from '../components/ui';
-import { say, setVoiceEnabled } from '../lib/voice';
-import { useStore } from '../lib/store';
+import { Body, Button, Card, Field, H2, Screen, Stepper, useTheme } from '../../components/ui';
+import { say, setVoiceEnabled } from '../../lib/voice';
+import { useStore } from '../../lib/store';
 
 export default function SettingsScreen() {
   const { settings, updateSettings } = useStore();

@@ -1,9 +1,8 @@
-import * as Clipboard from 'expo-clipboard';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Platform, ScrollView, Share, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Body, Button, Card, Field, H1, H2, Screen, useTheme } from '../../components/ui';
+import { useShare } from '../../components/ShareButton';
+import { Body, Button, Card, Chip, H1, H2, Screen, useTheme } from '../../components/ui';
 import { confirm } from '../../lib/confirm';
 import { clone, formatDuration, uid } from '../../lib/id';
 import { describeSet, estimateWorkout } from '../../lib/plan';
@@ -12,11 +11,10 @@ import { useStore } from '../../lib/store';
 
 export default function WorkoutDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { workouts, deleteWorkout, saveWorkout, ready } = useStore();
+  const { workouts, plans, deleteWorkout, saveWorkout, ready } = useStore();
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const [shareStatus, setShareStatus] = useState<string | null>(null);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const { share, panel } = useShare();
   const workout = workouts.find((w) => w.id === id);
 
   if (!ready) return <Screen />;
@@ -24,41 +22,13 @@ export default function WorkoutDetail() {
     return (
       <Screen style={{ padding: 16, gap: 12 }}>
         <H2>Workout not found</H2>
-        <Button title="Back to workouts" onPress={() => router.replace('/')} />
+        <Button title="Back to workouts" onPress={() => router.replace('/workouts')} />
       </Screen>
     );
   }
 
   const est = estimateWorkout(workout);
-
-  const onShare = async () => {
-    const link = shareLink(workout);
-    const message = `Try my workout "${workout.name}" on KineticCoach: ${link}`;
-    setShareUrl(link);
-    if (Platform.OS !== 'web') {
-      try {
-        await Share.share({ message, url: link });
-      } catch {
-        // user dismissed the share sheet
-      }
-      return;
-    }
-    const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { share?: Navigator['share'] }) : undefined;
-    if (nav?.share) {
-      try {
-        await nav.share({ title: workout.name, text: `Try my workout "${workout.name}" on KineticCoach`, url: link });
-        return;
-      } catch {
-        // dismissed or unsupported: fall through to copying
-      }
-    }
-    try {
-      await Clipboard.setStringAsync(link);
-      setShareStatus('Link copied to clipboard. Anyone with it can import this workout.');
-    } catch {
-      setShareStatus('Copy this link and send it to anyone you want to share the workout with:');
-    }
-  };
+  const inPlans = plans.filter((p) => p.workoutIds.includes(workout.id));
 
   const onDuplicate = () => {
     const copy = { ...clone(workout), id: uid(), name: `${workout.name} (copy)`, createdAt: Date.now() };
@@ -67,9 +37,10 @@ export default function WorkoutDetail() {
   };
 
   const onDelete = async () => {
-    if (await confirm('Delete workout', `Delete "${workout.name}"? This cannot be undone.`, 'Delete')) {
+    const note = inPlans.length ? ` It will also be removed from ${inPlans.map((p) => `"${p.name}"`).join(', ')}.` : '';
+    if (await confirm('Delete workout', `Delete "${workout.name}"? This cannot be undone.${note}`, 'Delete')) {
       deleteWorkout(workout.id);
-      router.replace('/');
+      router.replace('/workouts');
     }
   };
 
@@ -87,20 +58,24 @@ export default function WorkoutDetail() {
           </Body>
         </View>
 
+        {inPlans.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <Body muted>Part of:</Body>
+            {inPlans.map((p) => (
+              <Chip key={p.id} label={p.name} onPress={() => router.push({ pathname: '/plan/[id]', params: { id: p.id } })} />
+            ))}
+          </View>
+        ) : null}
+
         <Button big title="▶  Start workout" onPress={() => router.push({ pathname: '/play/[id]', params: { id: workout.id } })} />
 
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          <Button title="Share" variant="secondary" onPress={onShare} />
+          <Button title="Share" variant="secondary" onPress={() => share(workout.name, shareLink(workout))} />
           <Button title="Edit" variant="secondary" onPress={() => router.push({ pathname: '/edit/[id]', params: { id: workout.id } })} />
           <Button title="Duplicate" variant="secondary" onPress={onDuplicate} />
           <Button title="Delete" variant="ghost" onPress={onDelete} />
         </View>
-        {shareUrl ? (
-          <Card>
-            <Body muted>{shareStatus ?? 'Share link:'}</Body>
-            <Field value={shareUrl} editable={false} selectTextOnFocus accessibilityLabel="Share link" />
-          </Card>
-        ) : null}
+        {panel}
 
         {workout.items.map((item, i) => {
           const last = i === workout.items.length - 1;

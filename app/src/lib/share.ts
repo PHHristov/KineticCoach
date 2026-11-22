@@ -1,25 +1,25 @@
 import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
-import type { Workout, WorkoutItem, WorkoutType } from './types';
+import type { Plan, Workout, WorkoutItem, WorkoutType } from './types';
 import { WORKOUT_TYPES } from './types';
 import { uid } from './id';
 
 /**
- * Workouts are shared as a compact, URL-safe code containing the workout itself.
- * No server is needed: the code travels inside a link (or is pasted by hand).
+ * Workouts and plans are shared as a compact, URL-safe code that contains the
+ * content itself. No server is needed: the code travels inside a link.
  * When a backend exists this can be swapped for short server-side ids.
  */
 
 const VERSION = 1;
 
-type Packed = {
-  v: number;
-  n: string;
-  d: string;
-  t: WorkoutType;
-  a: string;
-  i: [string, string, 0 | 1, number, number, number, number, number, number][];
-};
+type PackedItem = [string, string, 0 | 1, number, number, number, number, number, number];
+type PackedWorkout = { n: string; d: string; t: WorkoutType; a: string; i: PackedItem[] };
+type PackedWorkoutCode = PackedWorkout & { v: number; k?: 'w' };
+type PackedPlanCode = { v: number; k: 'p'; n: string; d: string; a: string; w: PackedWorkout[] };
+
+export type Decoded =
+  | { kind: 'workout'; workout: Workout }
+  | { kind: 'plan'; plan: Plan; workouts: Workout[] };
 
 function toBase64Url(text: string): string {
   const utf8 = encodeURIComponent(text).replace(/%([0-9A-F]{2})/g, (_, h) =>
@@ -37,9 +37,8 @@ function fromBase64Url(code: string): string {
   );
 }
 
-export function encodeWorkout(w: Workout): string {
-  const packed: Packed = {
-    v: VERSION,
+function packWorkout(w: Workout): PackedWorkout {
+  return {
     n: w.name,
     d: w.description,
     t: w.type,
@@ -56,7 +55,6 @@ export function encodeWorkout(w: Workout): string {
       it.restAfterSec,
     ]),
   };
-  return toBase64Url(JSON.stringify(packed));
 }
 
 const num = (x: unknown, min: number, max: number) => {
@@ -66,18 +64,8 @@ const num = (x: unknown, min: number, max: number) => {
 };
 const str = (x: unknown, max: number) => (typeof x === 'string' ? x.slice(0, max) : '');
 
-/** Decodes and validates a share code. Throws if the code is not a valid workout. */
-export function decodeWorkout(code: string): Workout {
-  const trimmed = extractCode(code);
-  let raw: Packed;
-  try {
-    raw = JSON.parse(fromBase64Url(trimmed));
-  } catch {
-    throw new Error('This does not look like a KineticCoach workout code.');
-  }
-  if (!raw || raw.v !== VERSION || !Array.isArray(raw.i)) {
-    throw new Error('Unsupported or damaged workout code.');
-  }
+function unpackWorkout(raw: PackedWorkout): Workout {
+  if (!raw || !Array.isArray(raw.i)) throw new Error('Unsupported or damaged code.');
   const items: WorkoutItem[] = raw.i.slice(0, 100).map((r) => ({
     id: uid(),
     exerciseId: str(r[0], 80) || 'custom',
@@ -103,6 +91,55 @@ export function decodeWorkout(code: string): Workout {
   };
 }
 
+export function encodeWorkout(w: Workout): string {
+  const code: PackedWorkoutCode = { v: VERSION, ...packWorkout(w) };
+  return toBase64Url(JSON.stringify(code));
+}
+
+export function encodePlan(plan: Plan, workouts: Workout[]): string {
+  const byId = new Map(workouts.map((w) => [w.id, w]));
+  const code: PackedPlanCode = {
+    v: VERSION,
+    k: 'p',
+    n: plan.name,
+    d: plan.description,
+    a: plan.author,
+    w: plan.workoutIds.map((id) => byId.get(id)).filter((w): w is Workout => !!w).map(packWorkout),
+  };
+  return toBase64Url(JSON.stringify(code));
+}
+
+/** Decodes and validates a share code or link. Throws if it is not valid. */
+export function decodeShared(input: string): Decoded {
+  let raw: PackedWorkoutCode | PackedPlanCode;
+  try {
+    raw = JSON.parse(fromBase64Url(extractCode(input)));
+  } catch {
+    throw new Error('This does not look like a KineticCoach share code.');
+  }
+  if (!raw || raw.v !== VERSION) throw new Error('Unsupported or damaged code.');
+
+  if (raw.k === 'p') {
+    if (!Array.isArray(raw.w) || raw.w.length === 0) throw new Error('This plan has no workouts.');
+    const workouts = raw.w.slice(0, 7).map(unpackWorkout);
+    const now = Date.now();
+    return {
+      kind: 'plan',
+      workouts,
+      plan: {
+        id: uid(),
+        name: str(raw.n, 80) || 'Shared plan',
+        description: str(raw.d, 500),
+        author: str(raw.a, 60),
+        workoutIds: workouts.map((w) => w.id),
+        createdAt: now,
+        updatedAt: now,
+      },
+    };
+  }
+  return { kind: 'workout', workout: unpackWorkout(raw as PackedWorkoutCode) };
+}
+
 /** Accepts either a bare code or a full share link and returns the code. */
 export function extractCode(input: string): string {
   const s = input.trim();
@@ -110,10 +147,17 @@ export function extractCode(input: string): string {
   return m ? m[1] : s;
 }
 
-export function shareLink(w: Workout): string {
-  const code = encodeWorkout(w);
+function linkFor(code: string): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${window.location.origin}/import?code=${code}`;
   }
   return Linking.createURL('/import', { queryParams: { code } });
+}
+
+export function shareLink(w: Workout): string {
+  return linkFor(encodeWorkout(w));
+}
+
+export function planShareLink(plan: Plan, workouts: Workout[]): string {
+  return linkFor(encodePlan(plan, workouts));
 }

@@ -71,6 +71,18 @@ export interface Settings {
   displayName: string;
 }
 
+/** One set as actually performed, with what the user entered. */
+export interface LoggedSet {
+  exerciseId: string;
+  exerciseName: string;
+  setNumber: number;
+  mode: ExerciseMode;
+  reps: number;
+  weightKg: number;
+  durationSec: number;
+  at: number;
+}
+
 export interface CompletedSession {
   id: string;
   workoutId: string;
@@ -82,4 +94,32 @@ export interface CompletedSession {
   restSec: number;
   completedSets: number;
   totalSets: number;
+  /** Sets logged during the session (missing on sessions from before set logging). */
+  sets?: LoggedSet[];
+  /** Plan this session was scheduled from, if any. */
+  planId?: string;
+  /** True when the user pressed End before reaching the end of the workout. */
+  endedEarly?: boolean;
+}
+
+/**
+ * A training plan: an ordered list of workouts, one per training day.
+ * A 4-workout plan is a 4-day-a-week plan.
+ */
+export interface Plan {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  workoutIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** The plan the user follows and the weekdays they train on. */
+export interface Schedule {
+  planId: string;
+  /** Weekdays, 0 = Monday … 6 = Sunday, sorted. days[i] runs plan.workoutIds[i]. */
+  days: number[];
+  startedAt: number;
 }

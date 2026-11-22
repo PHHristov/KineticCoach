@@ -9,7 +9,8 @@ import { confirm } from '../../lib/confirm';
 import { formatDuration, uid } from '../../lib/id';
 import { buildSteps, type Step } from '../../lib/plan';
 import { useStore } from '../../lib/store';
-import type { WorkoutItem } from '../../lib/types';
+import { formatKg, setVolume } from '../../lib/stats';
+import type { LoggedSet, WorkoutItem } from '../../lib/types';
 import { say, setVoiceEnabled, stopVoice } from '../../lib/voice';
 
 /* ---------- spoken cues ---------- */
@@ -39,7 +40,7 @@ function announce(step: Step): string {
 export default function Player() {
   useScreenAwake();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { workouts, settings, logSession, ready } = useStore();
+  const { workouts, settings, logSession, ready, schedule, plans } = useStore();
   const workout = workouts.find((w) => w.id === id);
   const t = useTheme();
   const insets = useSafeAreaInsets();
@@ -56,8 +57,12 @@ export default function Player() {
   const [voiceOn, setVoiceOn] = useState(settings.voiceEnabled);
 
   const startedAt = useRef(Date.now());
-  const stats = useRef({ workSec: 0, restSec: 0, completedSets: 0 });
+  const stats = useRef({ workSec: 0, restSec: 0 });
   const lastSpokenSecond = useRef<number | null>(null);
+  /** Sets the user finished, keyed by step index so redoing a set replaces it. */
+  const logged = useRef(new Map<number, LoggedSet>());
+  /** What the user entered for the current set. */
+  const [entry, setEntry] = useState({ reps: 0, weightKg: 0 });
 
   const step: Step | undefined = steps[index];
   const elapsed = ((pausedAt ?? now) - stepStart) / 1000;
@@ -83,37 +88,72 @@ export default function Player() {
     lastSpokenSecond.current = null;
   }, [index, finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Prefill weight/reps for each new set: what was entered for this set before (after Back),
+  // else the previous set of the same exercise in this session, else the workout's targets.
+  useEffect(() => {
+    if (!step || step.kind !== 'work') return;
+    const again = logged.current.get(index);
+    if (again) {
+      setEntry({ reps: again.reps, weightKg: again.weightKg });
+      return;
+    }
+    let prev: LoggedSet | undefined;
+    for (const [k, set] of logged.current) {
+      const s = steps[k];
+      if (k < index && s?.kind === 'work' && s.itemIndex === step.itemIndex) prev = set;
+    }
+    setEntry({ reps: prev?.reps ?? step.item.reps, weightKg: prev?.weightKg ?? step.item.weightKg });
+  }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const recordStep = useCallback(
     (completed: boolean) => {
       if (!step) return;
       const spent = Math.max(0, elapsed);
       if (step.kind === 'work') {
         stats.current.workSec += spent;
-        if (completed) stats.current.completedSets += 1;
+        if (completed) {
+          logged.current.set(index, {
+            exerciseId: step.item.exerciseId,
+            exerciseName: step.item.exerciseName,
+            setNumber: step.setNumber,
+            mode: step.item.mode,
+            reps: step.item.mode === 'reps' ? entry.reps : 0,
+            weightKg: entry.weightKg,
+            durationSec: step.item.mode === 'time' ? Math.round(Math.min(spent, step.durationSec ?? spent)) : Math.round(spent),
+            at: Date.now(),
+          });
+        }
       } else if (step.kind === 'rest') {
         stats.current.restSec += spent;
       }
     },
-    [step, elapsed],
+    [step, elapsed, index, entry],
   );
+
+  const saveSession = useCallback((endedEarly = false) => {
+    if (!workout) return;
+    const sets = [...logged.current.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
+    logSession({
+      id: uid(),
+      workoutId: workout.id,
+      workoutName: workout.name,
+      startedAt: startedAt.current,
+      finishedAt: Date.now(),
+      workSec: Math.round(stats.current.workSec),
+      restSec: Math.round(stats.current.restSec),
+      completedSets: sets.length,
+      totalSets,
+      sets,
+      planId: schedule && plans.find((p) => p.id === schedule.planId)?.workoutIds.includes(workout.id) ? schedule.planId : undefined,
+      endedEarly,
+    });
+  }, [workout, logSession, totalSets, schedule, plans]);
 
   const finish = useCallback(() => {
     setFinished(true);
     say('Workout complete. Great job!');
-    if (workout) {
-      logSession({
-        id: uid(),
-        workoutId: workout.id,
-        workoutName: workout.name,
-        startedAt: startedAt.current,
-        finishedAt: Date.now(),
-        workSec: Math.round(stats.current.workSec),
-        restSec: Math.round(stats.current.restSec),
-        completedSets: stats.current.completedSets,
-        totalSets,
-      });
-    }
-  }, [workout, logSession, totalSets]);
+    saveSession();
+  }, [saveSession]);
 
   const goTo = useCallback(
     (next: number, completed: boolean) => {
@@ -166,8 +206,13 @@ export default function Player() {
   };
 
   const quit = async () => {
-    if (finished || (await confirm('End workout?', 'Your progress in this session will not be saved.', 'End'))) {
+    const n = logged.current.size;
+    const message = n
+      ? `The ${n} set${n === 1 ? '' : 's'} you logged will be saved to your history.`
+      : 'No sets were logged, so nothing will be saved.';
+    if (finished || (await confirm('End workout?', message, 'End'))) {
       stopVoice();
+      if (!finished && n) saveSession(true);
       if (router.canGoBack()) router.back();
       else router.replace('/');
     }
@@ -195,9 +240,10 @@ export default function Player() {
             <Row label="Total time" value={formatDuration(total)} />
             <Row label="Active time" value={formatDuration(stats.current.workSec)} />
             <Row label="Rest time" value={formatDuration(stats.current.restSec)} />
-            <Row label="Sets completed" value={`${stats.current.completedSets} / ${totalSets}`} />
+            <Row label="Sets completed" value={`${logged.current.size} / ${totalSets}`} />
+            <Row label="Weight lifted" value={formatKg([...logged.current.values()].reduce((n, s) => n + setVolume(s), 0))} />
           </Card>
-          <Button big title="Done" onPress={() => router.replace({ pathname: '/workout/[id]', params: { id: workout.id } })} />
+          <Button big title="Done" onPress={() => router.dismissTo('/')} />
         </View>
       </Screen>
     );
@@ -231,16 +277,25 @@ export default function Player() {
               <Text style={big.title} accessibilityRole="header">{step.item.exerciseName}</Text>
               <Text style={big.sub}>
                 Set {step.setNumber} of {step.item.sets}
-                {step.item.weightKg > 0 ? ` · ${step.item.weightKg} kg` : ''}
               </Text>
               {step.item.mode === 'reps' ? (
-                <>
-                  <Text style={big.timer}>{step.item.reps}</Text>
-                  <Text style={big.sub}>reps · {formatDuration(elapsed)}</Text>
-                </>
+                <Text style={big.sub}>Target {step.item.reps} reps · {formatDuration(elapsed)}</Text>
               ) : (
                 <Text style={big.timer} accessibilityLiveRegion="polite">{formatDuration(Math.ceil(remaining ?? 0))}</Text>
               )}
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+                <SetInput
+                  label="Weight"
+                  unit="kg"
+                  value={entry.weightKg}
+                  step={2.5}
+                  max={1000}
+                  onChange={(weightKg) => setEntry((e) => ({ ...e, weightKg }))}
+                />
+                {step.item.mode === 'reps' ? (
+                  <SetInput label="Reps" value={entry.reps} step={1} max={1000} onChange={(reps) => setEntry((e) => ({ ...e, reps }))} />
+                ) : null}
+              </View>
             </>
           ) : (
             <>
@@ -285,6 +340,46 @@ function Row({ label, value }: { label: string; value: string }) {
     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
       <Body muted>{label}</Body>
       <Body style={{ fontWeight: '700' }}>{value}</Body>
+    </View>
+  );
+}
+
+/** Big − value + control for logging a set, styled for the coloured player background. */
+function SetInput({
+  label,
+  unit,
+  value,
+  step,
+  max,
+  onChange,
+}: {
+  label: string;
+  unit?: string;
+  value: number;
+  step: number;
+  max: number;
+  onChange: (n: number) => void;
+}) {
+  const set = (n: number) => onChange(Math.round(Math.min(max, Math.max(0, n)) * 100) / 100);
+  const btn = { width: 44, height: 52, alignItems: 'center' as const, justifyContent: 'center' as const };
+  return (
+    <View style={{ alignItems: 'center', gap: 4 }}>
+      <Text style={{ color: '#fff', opacity: 0.85, fontWeight: '800', fontSize: 12, letterSpacing: 1 }}>{label.toUpperCase()}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 14 }}>
+        <Pressable onPress={() => set(value - step)} style={btn} accessibilityRole="button" accessibilityLabel={`Decrease ${label}`}>
+          <Text style={{ color: '#fff', fontSize: 26, fontWeight: '700' }}>−</Text>
+        </Pressable>
+        <Text
+          style={{ color: '#fff', fontSize: 30, fontWeight: '800', minWidth: 64, textAlign: 'center', fontVariant: ['tabular-nums'] }}
+          accessibilityLabel={`${label} ${value}${unit ? ' ' + unit : ''}`}
+        >
+          {value}
+          {unit ? <Text style={{ fontSize: 15, fontWeight: '700' }}> {unit}</Text> : null}
+        </Text>
+        <Pressable onPress={() => set(value + step)} style={btn} accessibilityRole="button" accessibilityLabel={`Increase ${label}`}>
+          <Text style={{ color: '#fff', fontSize: 26, fontWeight: '700' }}>+</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
