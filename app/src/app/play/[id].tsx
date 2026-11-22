@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Body, Button, Card, H1, H2, Screen, useTheme } from '../../components/ui';
+import { ExercisesLeft, SetProgressBar } from '../../components/WorkoutProgress';
 import { confirm } from '../../lib/confirm';
 import { formatDuration, uid } from '../../lib/id';
 import { buildSteps, type Step } from '../../lib/plan';
@@ -203,8 +204,7 @@ export default function Player() {
   }
 
   const color = step.kind === 'work' ? t.work : step.kind === 'rest' ? t.rest : t.prep;
-  const nextWork = steps.slice(index + 1).find((s) => s.kind === 'work') as Extract<Step, { kind: 'work' }> | undefined;
-  const progress = (index + (duration ? Math.min(1, elapsed / duration) : 0)) / steps.length;
+  const stepFraction = duration ? Math.min(1, elapsed / duration) : 0;
 
   return (
     <Screen style={{ backgroundColor: color }}>
@@ -221,12 +221,10 @@ export default function Player() {
             <Text style={pill}>{voiceOn ? '🔊 Voice' : '🔇 Muted'}</Text>
           </Pressable>
         </View>
-        <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 3, marginTop: 14, overflow: 'hidden' }}>
-          <View style={{ width: `${progress * 100}%`, height: '100%', backgroundColor: '#fff' }} />
-        </View>
+        <SetProgressBar steps={steps} index={index} fraction={stepFraction} />
 
         {/* main */}
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+        <View style={{ flexGrow: 1, flexShrink: 0, justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
           <Text style={big.label}>{step.kind === 'work' ? 'WORK' : step.kind === 'rest' ? 'REST' : 'GET READY'}</Text>
           {step.kind === 'work' ? (
             <>
@@ -261,13 +259,8 @@ export default function Player() {
           {pausedAt !== null ? <Text style={[big.sub, { fontWeight: '800' }]}>PAUSED</Text> : null}
         </View>
 
-        {/* up next */}
-        {nextWork && step.kind === 'work' ? (
-          <Text style={[big.sub, { textAlign: 'center', marginBottom: 12, fontSize: 15 }]}>
-            Up next: {nextWork.item.exerciseName}
-            {nextWork.item.sets > 1 ? ` (set ${nextWork.setNumber})` : ''}
-          </Text>
-        ) : null}
+        {/* exercises left */}
+        <ExercisesLeft steps={steps} index={index} />
 
         {/* controls */}
         <View style={{ gap: 10 }}>
